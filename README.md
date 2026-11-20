@@ -71,7 +71,7 @@
 ## 개발자용
 
 ```
-build\release.ps1 -Version 0.4.2     # artifacts\release\StarOverlay-0.4.2.exe 를 만든다
+build\release.ps1 -Version 0.4.3     # artifacts\release\StarOverlay-0.4.3.exe 를 만든다
 ```
 
 처음 한 번은 게임이 만든 interop 파일이 `artifacts\ingame-refs`에 있어야 에이전트를 빌드할 수 있습니다. `build\pack-ingame.ps1 -NoAgent`로 로더만 설치해 게임을 한 번 켠 뒤 `build\collect-interop.ps1 -Game <폴더>`를 실행합니다.
