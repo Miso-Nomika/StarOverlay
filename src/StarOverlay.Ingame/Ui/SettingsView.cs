@@ -721,9 +721,9 @@ internal sealed partial class SettingsView
             _sScroll = Math.Clamp(_sScroll + steps, 0, maxScroll);
             Redraw();
         });
-        // UID | skill | damage | share | crit | lucky | hits
-        var cols = Columns(w, 10, 30, 14, 12, 12, 12, 10);
-        var names = new[] { "UID", "스킬", "피해", "지분", "치명", "행운", "타수" };
+        // UID | skill | damage | hits | crit | lucky | share
+        var cols = Columns(w, 10, 30, 14, 10, 12, 12, 12);
+        var names = new[] { "UID", "스킬", "피해", "타수", "치명", "행운", "지분" };
         for (var c = 0; c < names.Length; c++)
             Text(region.transform, names[c], cols[c].X + 4, 0, cols[c].W - 8, 20, 12, muted, c >= 2 ? TextAlignmentOptions.MidlineRight : TextAlignmentOptions.MidlineLeft);
         if (maxScroll > 0)
@@ -748,10 +748,10 @@ internal sealed partial class SettingsView
                 s.Id == 0 ? "-" : s.Id.ToString(),
                 Esc(Fit(s.Name, cols[1].W - 8)),
                 UnitFormat.Short(s.Damage),
-                UnitFormat.Percent(share, 2),
+                s.Hits.ToString(),
                 UnitFormat.Percent((double)s.Crits / hits, 1),
                 UnitFormat.Percent((double)s.Luckies / hits, 1),
-                s.Hits.ToString(),
+                UnitFormat.Percent(share, 2),
             };
             for (var c = 0; c < cells.Length; c++)
                 Text(row.transform, cells[c], cols[c].X + 4, 0, cols[c].W - 8, rowH, 13, c == 0 ? muted : Color.white, c >= 2 ? TextAlignmentOptions.MidlineRight : TextAlignmentOptions.MidlineLeft);
