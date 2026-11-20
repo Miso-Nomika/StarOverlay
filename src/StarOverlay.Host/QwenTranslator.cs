@@ -294,6 +294,13 @@ internal static class QwenTranslator
         start.ArgumentList.Add("-fa");
         start.ArgumentList.Add("off");
         start.ArgumentList.Add("--no-warmup");
+        if (gpu)
+        {
+            // the weights live in video memory: without this the model file also stays mapped in main memory (about 3 GB more)
+            start.ArgumentList.Add("-lm");
+            start.ArgumentList.Add("none");
+        }
+
         var process = new Process { StartInfo = start, EnableRaisingEvents = true };
         try
         {
