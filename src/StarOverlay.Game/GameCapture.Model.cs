@@ -62,6 +62,7 @@ public sealed partial class GameCapture
         public bool SpecFromImagine;
         public bool DropSpec;
         public string[] Accessory = [];
+        public (int Id, int Slot)[] Equips = [];
         public long FightPoint;
         public int Season;
         public long Damage;

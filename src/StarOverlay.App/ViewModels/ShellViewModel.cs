@@ -102,14 +102,14 @@ public partial class ShellViewModel : ObservableObject
             IReadOnlyList<DiscoveredInstall> found = [];
             if (_finder is not null)
             {
-                Status = "설치 경로를 찾는 중...";
+                Status = "게임 설치 위치를 찾는 중...";
                 try
                 {
                     found = await Task.Run(() => _finder.Find());
                 }
                 catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
                 {
-                    Status = "설치 경로를 찾는 동안 오류가 났습니다.";
+                    Status = "게임 설치 위치를 찾는 동안 오류가 났습니다.";
                     return;
                 }
             }
@@ -120,20 +120,20 @@ public partial class ShellViewModel : ObservableObject
             {
                 SelectedClient = added[0];
                 Status = added.Count == 1
-                    ? $"{added[0].DisplayName} 클라이언트를 추가했습니다."
-                    : $"클라이언트 {added.Count}개를 추가했습니다.";
+                    ? $"{added[0].DisplayName}을(를) 목록에 추가했습니다."
+                    : $"게임 {added.Count}개를 목록에 추가했습니다.";
                 return;
             }
 
             if (found.Count > 0)
             {
-                Status = "찾은 설치본은 이미 등록되어 있습니다.";
+                Status = "찾은 게임은 이미 목록에 있습니다.";
                 return;
             }
 
             if (!browseWhenMissing || _browser is null)
             {
-                Status = "설치 경로를 찾지 못했습니다.";
+                Status = "게임을 찾지 못했습니다.";
                 return;
             }
 
@@ -169,7 +169,7 @@ public partial class ShellViewModel : ObservableObject
     private async Task BrowseAndRegister()
     {
         if (_browser is null) return;
-        Status = "설치 경로를 찾지 못했습니다. 폴더를 선택하세요.";
+        Status = "게임을 찾지 못했습니다. 게임 폴더를 직접 선택해 주세요.";
         string? picked;
         try
         {
@@ -189,12 +189,12 @@ public partial class ShellViewModel : ObservableObject
 
         if (_finder?.Resolve(picked) is { } install)
         {
-            RegisterOne(install.SuggestedName, install.Path, "선택한 폴더에서 게임 설치본을 추가했습니다.");
+            RegisterOne(install.SuggestedName, install.Path, "선택한 폴더의 게임을 목록에 추가했습니다.");
             return;
         }
 
         var name = Path.GetFileName(picked.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
-        RegisterOne(string.IsNullOrWhiteSpace(name) ? "클라이언트" : name, picked, "선택한 폴더를 클라이언트로 추가했습니다.");
+        RegisterOne(string.IsNullOrWhiteSpace(name) ? "게임" : name, picked, "선택한 폴더를 게임으로 추가했습니다.");
     }
 
     private List<GameClient> RegisterAll(IEnumerable<DiscoveredInstall> found)
@@ -247,7 +247,7 @@ public partial class ShellViewModel : ObservableObject
         SelectedClient = Clients.FirstOrDefault();
         LastError = null;
         Persist();
-        Status = $"{client.DisplayName} 클라이언트를 제거했습니다.";
+        Status = $"{client.DisplayName}을(를) 목록에서 뺐습니다.";
     }
 
     private bool CanRemoveSelected() => SelectedClient is not null;
@@ -265,16 +265,16 @@ public partial class ShellViewModel : ObservableObject
         ClientRosterStore.Save(_rosterPath, Clients.ToArray(), SelectedClient?.Id);
     }
 
-    private const string EmptyDetail = "클라이언트를 선택하면 해당 설치본의 모드를 여기서 관리합니다.";
+    private const string EmptyDetail = "게임을 선택하면 그 게임의 플러그인을 여기서 관리합니다.";
 
     private static string Message(CatalogAddError error) => error switch
     {
         CatalogAddError.NameRequired => "이름을 입력하세요.",
         CatalogAddError.NameInvalid => "이름은 64자 이하여야 하며 제어 문자를 넣을 수 없습니다.",
-        CatalogAddError.PathRequired => "설치 경로를 입력하세요.",
-        CatalogAddError.PathNotAbsolute => "설치 경로는 절대 경로여야 합니다.",
-        CatalogAddError.PathInvalid => "설치 경로를 해석할 수 없습니다.",
-        CatalogAddError.PathDuplicate => "이미 등록된 설치 경로입니다.",
-        _ => "클라이언트를 추가할 수 없습니다.",
+        CatalogAddError.PathRequired => "게임 폴더를 입력하세요.",
+        CatalogAddError.PathNotAbsolute => "게임 폴더는 전체 경로여야 합니다.",
+        CatalogAddError.PathInvalid => "게임 폴더를 확인할 수 없습니다.",
+        CatalogAddError.PathDuplicate => "이미 목록에 있는 게임 폴더입니다.",
+        _ => "게임을 추가할 수 없습니다.",
     };
 }

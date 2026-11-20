@@ -32,6 +32,8 @@ public sealed partial class GameCapture
     static string DungeonTable => TablePath("DungeonsTable.json");
     static string MonsterTable => TablePath("MonsterTable.json");
     static string ItemTable => TablePath("ItemTable.json");
+    static string EquipTable => TablePath("EquipTable.json");
+    static string EquipAttrLibTable => TablePath("EquipAttrLibTable.json");
 
     /// <summary>The service got newly dumped game tables: read every table again.</summary>
     public static void ReloadTables() => LoadNames();
@@ -43,6 +45,7 @@ public sealed partial class GameCapture
     public void OnTablesWritten()
     {
         LoadNames();
+        RecomputeEquip();
         bool inPlace;
         lock (_gate) inPlace = _sceneId > 0;
         if (inPlace) PublishLocation();
@@ -124,6 +127,7 @@ public sealed partial class GameCapture
         if (items.Count > 0) ItemBook.Set(items);
         var bosses = ReadBosses(MonsterTable);
         if (bosses.Count > 0) _bosses = bosses;
+        AccessoryGear.UseTables(EquipTable, EquipAttrLibTable);
     }
 
     static (HashSet<int> Master, HashSet<int> Raid, HashSet<int> Vault) ReadDungeons(string path)

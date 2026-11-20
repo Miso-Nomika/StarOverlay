@@ -34,7 +34,7 @@ public partial class App : Application
                 .ContinueWith(task => Avalonia.Threading.Dispatcher.UIThread.Post(() =>
                 {
                     shell.UsePayload(task.IsCompletedSuccessfully ? task.Result : null);
-                    shell.Status = shell.HasPayload ? "" : "설치 파일을 찾지 못했습니다. 이 프로그램을 다시 내려받으세요.";
+                    shell.Status = shell.HasPayload ? "" : "설치 파일을 찾지 못했습니다. 이 프로그램을 다시 내려받아 주세요.";
                 }));
             if (shell.Clients.Count == 0)
                 _ = shell.DiscoverInstallsAsync();

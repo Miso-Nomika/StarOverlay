@@ -2,12 +2,12 @@
   "dps.meter": {
     "X": 0,
     "Y": 0,
-    "W": 0.3304166666666678,
-    "H": 0.17500000000000052,
+    "W": 0.3293750000000011,
+    "H": 0.18796296296296341,
     "Opacity": 90,
     "Pinned": false,
     "Collapsed": false,
-    "HeaderHidden": true,
+    "HeaderHidden": false,
     "Channels": 63
   },
   "party.join": {
@@ -29,7 +29,7 @@
     "Opacity": 60,
     "Pinned": false,
     "Collapsed": false,
-    "HeaderHidden": true,
+    "HeaderHidden": false,
     "Channels": 63
   },
   "root": {
@@ -39,7 +39,7 @@
     "H": 0.14248148148148146,
     "Opacity": 90,
     "Pinned": false,
-    "Collapsed": true,
+    "Collapsed": false,
     "HeaderHidden": false,
     "Channels": 63
   },
@@ -66,8 +66,8 @@
     "Channels": 63
   },
   "buff.tracker": {
-    "X": 0.34677083333333253,
-    "Y": 0.6920370370370376,
+    "X": 0.34729166666666583,
+    "Y": 0.6050000000000008,
     "W": 0.18,
     "H": 0.12,
     "Opacity": 90,

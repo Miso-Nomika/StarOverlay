@@ -7,86 +7,216 @@
         Title="Star Overlay"
         FontFamily="avares://StarOverlay.App/Assets/Fonts#Pretendard"
         FontWeight="Bold"
-        Width="960" Height="640"
-        MinWidth="800" MinHeight="520"
+        Width="1000" Height="680"
+        MinWidth="860" MinHeight="560"
         WindowStartupLocation="CenterScreen">
-  <Grid ColumnDefinitions="240,*">
-    <Border Grid.Column="0" Padding="20,24" BorderThickness="0,0,1,0"
-            BorderBrush="{DynamicResource SystemControlForegroundBaseMediumLowBrush}">
+  <Window.Styles>
+    <Style Selector="Border.card">
+      <Setter Property="Background" Value="#12FFFFFF"/>
+      <Setter Property="BorderBrush" Value="#1FFFFFFF"/>
+      <Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="CornerRadius" Value="12"/>
+      <Setter Property="Padding" Value="18"/>
+    </Style>
+    <Style Selector="TextBlock.title">
+      <Setter Property="FontSize" Value="16"/>
+      <Setter Property="FontWeight" Value="Bold"/>
+    </Style>
+    <Style Selector="TextBlock.hint">
+      <Setter Property="FontSize" Value="13"/>
+      <Setter Property="FontWeight" Value="Normal"/>
+      <Setter Property="Opacity" Value="0.65"/>
+      <Setter Property="TextWrapping" Value="Wrap"/>
+    </Style>
+    <Style Selector="TextBlock.body">
+      <Setter Property="FontWeight" Value="Normal"/>
+      <Setter Property="Opacity" Value="0.9"/>
+      <Setter Property="TextWrapping" Value="Wrap"/>
+    </Style>
+    <Style Selector="Border.step">
+      <Setter Property="Width" Value="26"/>
+      <Setter Property="Height" Value="26"/>
+      <Setter Property="CornerRadius" Value="13"/>
+      <Setter Property="Background" Value="#5B8DEF"/>
+      <Setter Property="VerticalAlignment" Value="Top"/>
+    </Style>
+    <Style Selector="Border.step TextBlock">
+      <Setter Property="HorizontalAlignment" Value="Center"/>
+      <Setter Property="VerticalAlignment" Value="Center"/>
+      <Setter Property="FontSize" Value="13"/>
+      <Setter Property="Foreground" Value="White"/>
+    </Style>
+  </Window.Styles>
+
+  <Grid ColumnDefinitions="290,*">
+    <!-- left: what this is and how to start -->
+    <Border Grid.Column="0" Padding="26,30" Background="#0DFFFFFF" BorderThickness="0,0,1,0" BorderBrush="#1FFFFFFF">
       <DockPanel>
-        <StackPanel DockPanel.Dock="Top" Spacing="4" Margin="0,0,0,28">
-          <TextBlock Text="Star Overlay" FontSize="22" FontWeight="Bold"/>
-          <TextBlock Text="게임 안 표시 설치" Opacity="0.7"/>
+        <StackPanel DockPanel.Dock="Top" Spacing="6" Margin="0,0,0,26">
+          <TextBlock Text="Star Overlay" FontSize="28" FontWeight="Bold"/>
+          <TextBlock Text="블루 프로토콜: 스타 레조넌스" Classes="hint"/>
+          <TextBlock Margin="0,10,0,0" Classes="body"
+                     Text="게임 화면 위에 DPS 미터기, 채팅, 버프 트래커, 파티 가입 정보를 보여 줍니다."/>
         </StackPanel>
-        <TextBlock Text="게임 설치본을 고르고 설치를 누르면 끝입니다. 게임을 켜면 화면에 미터기·채팅·파티 신청이 나옵니다." TextWrapping="Wrap" Opacity="0.75"/>
+
+        <TextBlock DockPanel.Dock="Bottom" Margin="0,16,0,0" Classes="hint"
+                   Text="게임이 켜져 있으면 설치할 수 없습니다. 게임을 끈 뒤 진행해 주세요."/>
+
+        <StackPanel Spacing="16">
+          <TextBlock Text="시작하는 방법" Classes="title"/>
+          <Grid ColumnDefinitions="Auto,*">
+            <Border Classes="step"><TextBlock Text="1"/></Border>
+            <StackPanel Grid.Column="1" Margin="12,0,0,0" Spacing="2">
+              <TextBlock Text="게임 고르기" FontSize="14"/>
+              <TextBlock Text="게임 설치 위치를 찾아 목록에서 고릅니다." Classes="hint"/>
+            </StackPanel>
+          </Grid>
+          <Grid ColumnDefinitions="Auto,*">
+            <Border Classes="step"><TextBlock Text="2"/></Border>
+            <StackPanel Grid.Column="1" Margin="12,0,0,0" Spacing="2">
+              <TextBlock Text="설치하기" FontSize="14"/>
+              <TextBlock Text="오버레이를 설치하고, 전투 정보 수신을 한 번 설정합니다." Classes="hint"/>
+            </StackPanel>
+          </Grid>
+          <Grid ColumnDefinitions="Auto,*">
+            <Border Classes="step"><TextBlock Text="3"/></Border>
+            <StackPanel Grid.Column="1" Margin="12,0,0,0" Spacing="2">
+              <TextBlock Text="게임 켜기" FontSize="14"/>
+              <TextBlock Text="게임을 켜면 화면 위에 창이 나타납니다." Classes="hint"/>
+            </StackPanel>
+          </Grid>
+        </StackPanel>
       </DockPanel>
     </Border>
 
-    <DockPanel Grid.Column="1" Margin="24">
-      <TextBlock DockPanel.Dock="Bottom" Margin="0,16,0,0" Text="{Binding Status}" Opacity="0.85" TextWrapping="Wrap"/>
+    <!-- right: the work -->
+    <DockPanel Grid.Column="1" Margin="26">
+      <Border DockPanel.Dock="Bottom" Classes="card" Padding="14,10" Margin="0,18,0,0">
+        <TextBlock Text="{Binding Status}" Classes="body" VerticalAlignment="Center"/>
+      </Border>
 
-      <Grid ColumnDefinitions="320,*">
-        <DockPanel Margin="0,0,20,0">
-          <StackPanel DockPanel.Dock="Top" Spacing="8" Margin="0,0,0,8">
-            <TextBlock Text="클라이언트" FontWeight="Bold"/>
-            <Button Content="설치본 찾기" MinWidth="108" HorizontalAlignment="Left" Command="{Binding FindInstallsCommand}"/>
-          </StackPanel>
-          <Button DockPanel.Dock="Bottom" Content="선택 제거" HorizontalAlignment="Left" Margin="0,8,0,0" Command="{Binding RemoveSelectedCommand}"/>
-          <TextBlock Text="아직 없습니다." IsVisible="{Binding ShowEmptyClients}" Opacity="0.7" VerticalAlignment="Top"/>
-          <ListBox ItemsSource="{Binding Clients}" SelectedItem="{Binding SelectedClient}" IsVisible="{Binding HasClients}">
-            <ListBox.ItemTemplate>
-              <DataTemplate x:DataType="model:GameClient">
-                <StackPanel Margin="2" Spacing="2">
-                  <TextBlock Text="{Binding DisplayName}" FontWeight="Bold"/>
-                  <TextBlock Text="{Binding InstallPath}" FontSize="12" Opacity="0.7" TextTrimming="CharacterEllipsis"/>
-                </StackPanel>
-              </DataTemplate>
-            </ListBox.ItemTemplate>
-          </ListBox>
-        </DockPanel>
-
-        <ScrollViewer Grid.Column="1">
-          <StackPanel Spacing="12">
-            <TextBlock Text="인게임 표시" FontWeight="Bold"/>
-            <TextBlock Text="{Binding IngameText}" TextWrapping="Wrap" Opacity="0.85"/>
-            <StackPanel Orientation="Horizontal" Spacing="8">
-              <Button Content="{Binding IngameActionLabel}" IsVisible="{Binding ShowIngameAction}"
-                      IsEnabled="{Binding !IngameBusy}" Command="{Binding InstallIngameCommand}"/>
-              <Button Content="제거" IsVisible="{Binding CanUninstall}" Command="{Binding UninstallIngameCommand}"/>
-            </StackPanel>            <TextBlock Text="게임 통신 수신" FontWeight="Bold"/>
-            <TextBlock Text="{Binding CaptureText}" TextWrapping="Wrap" Opacity="0.85"/>
-            <Button Content="{Binding CaptureActionLabel}" HorizontalAlignment="Left"
-                    IsVisible="{Binding ShowCaptureAction}" IsEnabled="{Binding !CaptureBusy}" Command="{Binding SetupCaptureCommand}"/>
-            <TextBlock Text="플러그인 라이브러리" FontWeight="Bold"/>
-            <TextBlock Text="보관된 플러그인이 없습니다." IsVisible="{Binding ShowEmptyLibrary}" Opacity="0.7"/>
-            <ItemsControl ItemsSource="{Binding Library}" IsVisible="{Binding HasLibrary}">
-              <ItemsControl.ItemTemplate>
-                <DataTemplate x:DataType="vm:LibraryRowViewModel">
-                  <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,8">
-                    <StackPanel Spacing="2">
-                      <TextBlock Text="{Binding Name}" FontWeight="Bold"/>
-                      <TextBlock Text="{Binding Detail}" FontSize="12" Opacity="0.7"/>
-                    </StackPanel>
-                    <Button Grid.Column="1" MinWidth="72" Content="{Binding ActionLabel}"
-                            Command="{Binding ActCommand}" IsEnabled="{Binding CanAct}"/>
-                  </Grid>
-                </DataTemplate>
-              </ItemsControl.ItemTemplate>
-            </ItemsControl>
-            <Button Content="라이브러리에 추가" HorizontalAlignment="Left" Command="{Binding AddToLibraryCommand}"/>
-            <TextBlock Text="저장된 세부직업" FontWeight="Bold"/>
-            <TextBlock Text="{Binding SpecsText}" TextWrapping="Wrap" Opacity="0.85"/>
-            <ListBox ItemsSource="{Binding Specs}" IsVisible="{Binding HasSpecs}" Height="220">
+      <Grid ColumnDefinitions="300,*">
+        <!-- the games -->
+        <Border Classes="card" Margin="0,0,18,0">
+          <DockPanel>
+            <StackPanel DockPanel.Dock="Top" Spacing="4" Margin="0,0,0,12">
+              <TextBlock Text="게임" Classes="title"/>
+              <TextBlock Text="오버레이를 설치할 게임을 고르세요." Classes="hint"/>
+            </StackPanel>
+            <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Spacing="8" Margin="0,12,0,0">
+              <Button Content="게임 찾기" MinWidth="96" Command="{Binding FindInstallsCommand}"/>
+              <Button Content="목록에서 빼기" Command="{Binding RemoveSelectedCommand}"/>
+            </StackPanel>
+            <TextBlock Text="아직 찾은 게임이 없습니다. 게임 찾기를 눌러 주세요." IsVisible="{Binding ShowEmptyClients}"
+                       Classes="body" Opacity="0.6" VerticalAlignment="Top"/>
+            <ListBox ItemsSource="{Binding Clients}" SelectedItem="{Binding SelectedClient}" IsVisible="{Binding HasClients}"
+                     Background="Transparent">
               <ListBox.ItemTemplate>
-                <DataTemplate x:DataType="vm:SpecRowViewModel">
-                  <StackPanel Margin="2" Spacing="1">
-                    <TextBlock Text="{Binding Title}" FontWeight="Bold"/>
-                    <TextBlock Text="{Binding Detail}" FontSize="12" Opacity="0.7"/>
+                <DataTemplate x:DataType="model:GameClient">
+                  <StackPanel Margin="2,4" Spacing="2">
+                    <TextBlock Text="{Binding DisplayName}" FontWeight="Bold"/>
+                    <TextBlock Text="{Binding InstallPath}" FontSize="12" Opacity="0.6" FontWeight="Normal" TextTrimming="CharacterEllipsis"/>
                   </StackPanel>
                 </DataTemplate>
               </ListBox.ItemTemplate>
             </ListBox>
-            <Button Content="새로고침" HorizontalAlignment="Left" Command="{Binding RefreshSpecsCommand}"/>
+          </DockPanel>
+        </Border>
+
+        <!-- the cards -->
+        <ScrollViewer Grid.Column="1">
+          <StackPanel Spacing="14" Margin="0,0,10,0">
+            <Border Classes="card">
+              <StackPanel Spacing="10">
+                <TextBlock Text="오버레이" Classes="title"/>
+                <TextBlock Text="{Binding IngameText}" Classes="body"/>
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                  <Button Content="{Binding IngameActionLabel}" Classes="accent" MinWidth="104" IsVisible="{Binding ShowIngameAction}"
+                          IsEnabled="{Binding !IngameBusy}" Command="{Binding InstallIngameCommand}"/>
+                  <Button Content="제거" IsVisible="{Binding CanUninstall}" Command="{Binding UninstallIngameCommand}"/>
+                </StackPanel>
+              </StackPanel>
+            </Border>
+
+            <Border Classes="card">
+              <StackPanel Spacing="10">
+                <StackPanel Spacing="4">
+                  <TextBlock Text="전투 정보 수신" Classes="title"/>
+                  <TextBlock Text="파티원의 피해량과 채팅을 읽어 오는 도우미입니다." Classes="hint"/>
+                </StackPanel>
+                <TextBlock Text="{Binding CaptureText}" Classes="body"/>
+                <Button Content="{Binding CaptureActionLabel}" HorizontalAlignment="Left" MinWidth="104"
+                        IsVisible="{Binding ShowCaptureAction}" IsEnabled="{Binding !CaptureBusy}" Command="{Binding SetupCaptureCommand}"/>
+              </StackPanel>
+            </Border>
+
+            <Border Classes="card">
+              <StackPanel Spacing="10">
+                <StackPanel Spacing="4">
+                  <TextBlock Text="플러그인" Classes="title"/>
+                  <TextBlock Text="켜고 끌 수 있고, 직접 만든 플러그인(.dll)을 보관함에 추가할 수도 있습니다." Classes="hint"/>
+                </StackPanel>
+                <TextBlock Text="보관된 플러그인이 없습니다." IsVisible="{Binding ShowEmptyLibrary}" Classes="body" Opacity="0.6"/>
+                <ItemsControl ItemsSource="{Binding Library}" IsVisible="{Binding HasLibrary}">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:LibraryRowViewModel">
+                      <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,10">
+                        <StackPanel Spacing="2" VerticalAlignment="Center">
+                          <TextBlock Text="{Binding Name}" FontWeight="Bold"/>
+                          <TextBlock Text="{Binding Detail}" FontSize="12" Opacity="0.6" FontWeight="Normal"/>
+                        </StackPanel>
+                        <Button Grid.Column="1" MinWidth="76" Content="{Binding ActionLabel}"
+                                Command="{Binding ActCommand}" IsEnabled="{Binding CanAct}"/>
+                      </Grid>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+                <Button Content="보관함에 추가" HorizontalAlignment="Left" Command="{Binding AddToLibraryCommand}"/>
+              </StackPanel>
+            </Border>
+
+            <Border Classes="card">
+              <StackPanel Spacing="10">
+                <StackPanel Spacing="4">
+                  <TextBlock Text="저장 위치" Classes="title"/>
+                  <TextBlock Text="설정과 기록이 저장되는 곳입니다." Classes="hint"/>
+                </StackPanel>
+                <Border Background="#1A000000" CornerRadius="8" Padding="12,10">
+                  <SelectableTextBlock Text="{Binding DataFolder}" FontWeight="Normal" FontSize="13" TextWrapping="Wrap"/>
+                </Border>
+                <TextBlock Text="{Binding StorageData}" Classes="body"/>
+                <StackPanel Spacing="2">
+                  <TextBlock Text="게임 폴더" FontSize="13"/>
+                  <TextBlock Text="{Binding StorageGame}" Classes="hint"/>
+                </StackPanel>
+                <StackPanel Spacing="2">
+                  <TextBlock Text="전투 정보 수신 도우미" FontSize="13"/>
+                  <TextBlock Text="{Binding StorageHelper}" Classes="hint"/>
+                </StackPanel>
+                <Button Content="폴더 열기" HorizontalAlignment="Left" Command="{Binding OpenDataFolderCommand}"/>
+              </StackPanel>
+            </Border>
+
+            <Border Classes="card">
+              <StackPanel Spacing="10">
+                <StackPanel Spacing="4">
+                  <TextBlock Text="세부직업 기록" Classes="title"/>
+                  <TextBlock Text="플레이 중 알아낸 캐릭터별 세부직업입니다. 읽기 전용입니다." Classes="hint"/>
+                </StackPanel>
+                <TextBlock Text="{Binding SpecsText}" Classes="body"/>
+                <ListBox ItemsSource="{Binding Specs}" IsVisible="{Binding HasSpecs}" Height="220" Background="Transparent">
+                  <ListBox.ItemTemplate>
+                    <DataTemplate x:DataType="vm:SpecRowViewModel">
+                      <StackPanel Margin="2,3" Spacing="1">
+                        <TextBlock Text="{Binding Title}" FontWeight="Bold"/>
+                        <TextBlock Text="{Binding Detail}" FontSize="12" Opacity="0.6" FontWeight="Normal"/>
+                      </StackPanel>
+                    </DataTemplate>
+                  </ListBox.ItemTemplate>
+                </ListBox>
+                <Button Content="새로 고침" HorizontalAlignment="Left" Command="{Binding RefreshSpecsCommand}"/>
+              </StackPanel>
+            </Border>
           </StackPanel>
         </ScrollViewer>
       </Grid>

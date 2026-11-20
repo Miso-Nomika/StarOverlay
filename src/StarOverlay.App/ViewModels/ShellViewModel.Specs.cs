@@ -43,7 +43,7 @@ public partial class ShellViewModel
         foreach (var row in rows) Specs.Add(new SpecRowViewModel(row));
         SpecsText = rows.Count == 0
             ? "아직 저장된 세부직업이 없습니다. 게임에서 파티 신청이나 전투를 보면 쌓입니다."
-            : $"저장된 세부직업 {rows.Count.ToString("N0", CultureInfo.InvariantCulture)}명 (uid · 세부직업, 확정은 직접 확인한 값)";
+            : $"세부직업 {rows.Count.ToString("N0", CultureInfo.InvariantCulture)}명이 저장되어 있습니다. (캐릭터 번호 · 세부직업, 확정은 스킬로 직접 확인한 값)";
         OnPropertyChanged(nameof(HasSpecs));
     }
 

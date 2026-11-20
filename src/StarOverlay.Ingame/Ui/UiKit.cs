@@ -168,7 +168,15 @@ internal static class UiKit
     {
         var go = new GameObject(name, new Il2CppSystem.Type[] { Il2CppType.Of<RectTransform>() });
         go.transform.SetParent(parent, false);
+        if (parent != null) go.layer = parent.gameObject.layer; // under the chat's camera canvas everything must be on the layer the game's camera draws
         return go;
+    }
+
+    /// <summary>Puts an element and everything under it on one layer.</summary>
+    public static void SetLayer(GameObject go, int layer)
+    {
+        go.layer = layer;
+        for (var i = 0; i < go.transform.childCount; i++) SetLayer(go.transform.GetChild(i).gameObject, layer);
     }
 
     public static RectTransform Rt(GameObject go) => go.GetComponent<RectTransform>();

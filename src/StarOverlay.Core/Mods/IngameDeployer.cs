@@ -156,7 +156,7 @@ public static class IngameDeployer
         var loader = Path.Combine(packageDir, "bepinex");
         var agent = Path.Combine(packageDir, "agent");
         if (!Directory.Exists(loader) || !Directory.Exists(agent) || !File.Exists(Path.Combine(loader, "winhttp.dll")))
-            return Fail(IngameError.PackageMissing, "인게임 설치 파일을 찾지 못했습니다.");
+            return Fail(IngameError.PackageMissing, "오버레이 설치 파일을 찾지 못했습니다.");
         if ((isGameRunning ?? IsGameRunning)(game)) return Fail(IngameError.GameRunning, "게임이 실행 중입니다. 게임을 끈 뒤 다시 시도하세요.");
 
         var previous = ReadManifest(game);
@@ -191,7 +191,7 @@ public static class IngameDeployer
             WriteText(ServicePath(game), JsonSerializer.Serialize(new { host = hostExe, package = manifest.PackageId }, Json), game, manifest);
             foreach (var directory in created) manifest.Directories.Add(directory);
             File.WriteAllText(ManifestPath(game), JsonSerializer.Serialize(manifest, Json));
-            return new IngameResult(true, null, "인게임 표시를 설치했습니다.");
+            return new IngameResult(true, null, "오버레이를 설치했습니다.");
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -215,7 +215,7 @@ public static class IngameDeployer
         if (!Directory.Exists(game)) return Fail(IngameError.GameDirectoryMissing, "게임 폴더를 찾지 못했습니다.");
         if ((isGameRunning ?? IsGameRunning)(game)) return Fail(IngameError.GameRunning, "게임이 실행 중입니다. 게임을 끈 뒤 다시 시도하세요.");
         var manifest = ReadManifest(game);
-        if (manifest is null) return new IngameResult(true, null, "설치된 인게임 표시가 없습니다.");
+        if (manifest is null) return new IngameResult(true, null, "설치된 오버레이가 없습니다.");
         try
         {
             RemoveFiles(game, manifest);
@@ -225,7 +225,7 @@ public static class IngameDeployer
             File.Delete(ManifestPath(game));
             var bpsr = ModLayout.Root(game);
             if (Directory.Exists(bpsr) && !Directory.EnumerateFileSystemEntries(bpsr).Any()) Directory.Delete(bpsr);
-            return new IngameResult(true, null, "인게임 표시를 제거했습니다.");
+            return new IngameResult(true, null, "오버레이를 제거했습니다.");
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {

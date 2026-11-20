@@ -506,13 +506,23 @@ internal sealed class ChatPanel
     /// <summary>A click on a linked item in a message: the game's own item card opens, as when its chat link is clicked.</summary>
     void ItemClicked(Bubble bubble, Vector2 screenPoint)
     {
-        var index = TMP_TextUtilities.FindIntersectingLink(bubble.Body, new Vector3(screenPoint.x, screenPoint.y, 0f), null);
+        var canvas = bubble.Body.canvas == null ? null : bubble.Body.canvas.rootCanvas;
+        var camera = canvas != null && canvas.renderMode != RenderMode.ScreenSpaceOverlay ? canvas.worldCamera : null; // the chat is drawn by the game's camera
+        var index = TMP_TextUtilities.FindIntersectingLink(bubble.Body, new Vector3(screenPoint.x, screenPoint.y, 0f), camera);
         if (index < 0 || index >= bubble.Links.Count) return;
         // the game's own link in its chat bubble is clicked when that bubble is still in the game's list (the card then carries the item's own
         // data); otherwise the card is asked for by the item id
         var link = bubble.Links[index];
-        if (GameChatUi.ClickItemLink(bubble.Who, link.Token.Length > 0 ? link.Token : link.Name)) return;
-        GameItemTips.Show(link.ItemId, screenPoint);
+        var name = link.Token.Length > 0 ? link.Token : link.Name;
+        if (GameChatUi.ClickItemLink(bubble.Who, name))
+        {
+            ItemCardMover.Request(screenPoint); // the game opens the card at its own bubble: it is moved to where the user pressed
+            return;
+        }
+
+        // not among the bubbles the game keeps: look back through its list (a line without a person, like loot, has no bubble to find)
+        if (bubble.Who.Length > 0) CardSeeker.StartItem(bubble.Who, name, link.ItemId, screenPoint);
+        else GameItemTips.Show(link.ItemId, screenPoint);
     }
 
     Bubble Take(int index)
@@ -685,6 +695,7 @@ internal sealed class ChatPanel
 
             var sticker = new GameObject("Sticker");
             sticker.transform.SetParent(Root.transform, false);
+            sticker.layer = Root.layer;
             Sticker = sticker.AddComponent<RawImage>();
             Sticker.raycastTarget = false;
             sticker.SetActive(false);

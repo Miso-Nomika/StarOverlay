@@ -83,8 +83,21 @@ static class GameChatUi
                 var info = FindInfo();
                 if (_infoFound)
                 {
-                    // the character info line at the bottom left (level, title, UID) is the only thing that decides
-                    var why = info == null ? "not found" : WhyHidden(info) ?? CoveredBy(info);
+                    // the character info line at the bottom left (level, title, UID) decides, and another screen over it hides our windows
+                    var why = info == null ? "not found" : WhyHidden(info);
+                    if (why == null) why = CoveredBy(info);
+                    else
+                    {
+                        // the line itself is switched off: the game does that when the character is dead, but the main screen it belongs to stays up
+                        // (the minimap, the chat...). So the main screen being up decides, and another screen over the place of the line (the full
+                        // screen windows, dialogs and cut scenes) hides our windows just the same. Neither depends on the chat bar, which fades out
+                        // The death screen ("dead_window_pc") fades the whole main screen out, so it counts as the main screen being up too.
+                        var hud = HudRoot(info);
+                        var hudWhy = hud == null ? "no main screen" : WhyHidden(hud);
+                        if (hudWhy != null && DeathScreenUp(info)) hudWhy = null;
+                        why = hudWhy != null ? why + ", main screen: " + hudWhy : CoveredBy(info);
+                    }
+
                     reason = why == null ? "" : "info " + why;
                 }
                 else
@@ -101,8 +114,24 @@ static class GameChatUi
             reason = "error " + e.Message;
         }
 
-        return reason.Length == 0;
+        // The game switches things on and off for a moment while it changes screens (the death screen fades in and out in steps): a hide reason
+        // that holds for less than a third of a second is no reason to blink our windows. Loading screens hide at once.
+        var now = Time.realtimeSinceStartup;
+        bool shown;
+        if (reason.Length == 0) { _hiddenSince = -1f; shown = true; }
+        else if (reason == "loading screen") { _hiddenSince = -1f; shown = false; }
+        else
+        {
+            if (_hiddenSince < 0f) _hiddenSince = now;
+            shown = _lastShown && now - _hiddenSince < 0.35f;
+        }
+
+        _lastShown = shown;
+        return shown;
     }
+
+    static float _hiddenSince = -1f;
+    static bool _lastShown;
 
     /// <summary>
     /// The label of the key hint line. It is first found by its words ("내비게이션" and "길게"), later by its place in the screen tree.
@@ -201,8 +230,8 @@ static class GameChatUi
             var system = UnityEngine.EventSystems.EventSystem.current;
             var rect = info.GetComponent<RectTransform>();
             if (system == null || rect == null) return null;
-            var text = info.GetComponent<TMPro.TMP_Text>();
-            var canvas = text == null || text.canvas == null ? null : text.canvas.rootCanvas;
+            var own = info.GetComponentInParent<Canvas>(true); // also for a node that is switched off: its place on the screen is still known
+            var canvas = own == null ? null : own.rootCanvas;
             var camera = canvas != null && canvas.renderMode != RenderMode.ScreenSpaceOverlay ? canvas.worldCamera : null;
             var at = RectTransformUtility.WorldToScreenPoint(camera, rect.TransformPoint(rect.rect.center));
             _probe ??= new UnityEngine.EventSystems.PointerEventData(system);
@@ -214,7 +243,16 @@ static class GameChatUi
             {
                 var hit = Hits[i].gameObject;
                 if (hit == null || hit.transform.root.name.StartsWith("StarOverlay", StringComparison.Ordinal)) continue;
-                return LayerOf(hit.transform) != mine ? "covered" : null; // the first hit that is not ours is the one on top
+                // a window opened with a click-away mask puts an invisible full-screen catcher over everything: it is no screen that hides
+                // anything, so what is not to be seen (switched off, faded out, a fully transparent picture) is skipped
+                if (WhyHidden(hit.transform) != null) continue;
+                var picture = hit.GetComponent<UnityEngine.UI.Graphic>();
+                if (picture != null && picture.color.a < 0.05f) continue;
+                var layer = LayerOf(hit.transform);
+                if (layer == mine) return null; // the first thing to be seen that is not ours is the one on top
+                // small pop-ups (the T quick slots, tips, notices) do not hide the screen behind them; the full-screen windows live in other layers
+                if (layer is "UILayerTip" or "UILayerTipTop") continue;
+                return "covered";
             }
 
             return null;
@@ -239,6 +277,29 @@ static class GameChatUi
         var camera = canvas != null && canvas.renderMode != RenderMode.ScreenSpaceOverlay ? canvas.worldCamera : null;
         var at = RectTransformUtility.WorldToScreenPoint(camera, text.transform.position);
         return at.y < Screen.height * 0.25f && at.x < Screen.width * 0.6f;
+    }
+
+    /// <summary>The root of the main screen the info line belongs to ("main_main_pc(Clone)": the minimap, the chat, the skill bar...), or null.</summary>
+    static Transform HudRoot(Transform part)
+    {
+        for (var node = part; node != null; node = node.parent)
+            if (node.name.StartsWith("main_main_pc", StringComparison.Ordinal)) return node;
+        return null;
+    }
+
+    /// <summary>Whether the death screen is up: a "dead_window" among the windows of the layer the info line lives in.</summary>
+    static bool DeathScreenUp(Transform info)
+    {
+        var layer = info;
+        for (var parent = info.parent; parent != null && parent.parent != null; parent = parent.parent) layer = parent;
+        if (layer == null || layer == info) return false;
+        for (var i = 0; i < layer.childCount; i++)
+        {
+            var window = layer.GetChild(i);
+            if (window.name.StartsWith("dead_window", StringComparison.Ordinal) && WhyHidden(window) == null) return true;
+        }
+
+        return false;
     }
 
     static string PathOf(Transform node)
@@ -436,6 +497,49 @@ static class GameChatUi
     }
 
     static int _linkLogs;
+
+    /// <summary>Whether a screen point is on the entries of the game's channel tab.</summary>
+    internal static bool ChannelTabContains(Vector2 screen, Camera camera)
+    {
+        var chat = FindChat();
+        var content = chat == null ? null : Find(Find(chat, "node_channel"), "node_content");
+        var rect = content == null ? null : content.GetComponent<RectTransform>();
+        return rect != null && RectTransformUtility.RectangleContainsScreenPoint(rect, screen, camera);
+    }
+
+    /// <summary>Closes the game's channel tab the way the user does: its channel button is pressed again.</summary>
+    internal static void CloseChannelTab()
+    {
+        var chat = FindChat();
+        var button = chat == null ? null : Find(chat, "btn_channel");
+        if (button == null) return;
+        var data = new UnityEngine.EventSystems.PointerEventData(UnityEngine.EventSystems.EventSystem.current);
+        UnityEngine.EventSystems.ExecuteEvents.Execute(button.gameObject, data, UnityEngine.EventSystems.ExecuteEvents.pointerClickHandler);
+    }
+
+    /// <summary>Whether the game's channel tab (the list that opens from the channel button of its chat input) is open: its entries exist only then.</summary>
+    internal static bool ChannelTabOpen()
+    {
+        try
+        {
+            var chat = FindChat();
+            var content = chat == null ? null : Find(Find(chat, "node_channel"), "node_content");
+            if (content == null) return false;
+            for (var i = 0; i < content.childCount; i++)
+            {
+                var entry = content.GetChild(i);
+                // the game keeps the list switched on and hides it (faded out or squeezed to nothing) while it is closed: it counts as open
+                // only when an entry is really on screen
+                if (entry.name.StartsWith("main_channel_tpl", StringComparison.Ordinal) && WhyHidden(entry) == null) return true;
+            }
+
+            return false;
+        }
+        catch (Exception)
+        {
+            return false;
+        }
+    }
 
     /// <summary>
     /// Clicks the item link of the game's own chat bubble that shows the same item (newest bubble first, of the same sender when the bubble names one),

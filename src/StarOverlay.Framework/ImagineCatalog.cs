@@ -6,6 +6,7 @@ namespace StarOverlay.Framework;
 public sealed class ImagineCatalog
 {
     readonly Dictionary<long, Player> _players = [];
+    (int Imagine, string Spec, int Count)[] _seed = [];
 
     sealed record Player(string Spec, int[] Imagines);
 
@@ -23,9 +24,32 @@ public sealed class ImagineCatalog
         return true;
     }
 
+    /// <summary>
+    /// Counts that ship with the program (how often each imagine was seen on players whose job their gear settled, summed over many players, no
+    /// player in it): a new user starts with them instead of an empty list, so a job can be guessed from the imagines at the first sight.
+    /// What this PC learns is added on top.
+    /// </summary>
+    public void UseSeed(string json)
+    {
+        try
+        {
+            var body = JsonSerializer.Deserialize<SeedBody>(json, Json);
+            if (body?.Rows == null) return;
+            _seed = body.Rows
+                .Where(row => row.Length == 3 && row[0].ValueKind == JsonValueKind.Number && row[1].ValueKind == JsonValueKind.String && row[2].ValueKind == JsonValueKind.Number)
+                .Select(row => (row[0].GetInt32(), row[1].GetString() ?? "", row[2].GetInt32()))
+                .Where(row => row.Item3 > 0 && ImagineSpec.Profession(row.Item2) != 0)
+                .ToArray();
+        }
+        catch (JsonException)
+        {
+        }
+    }
+
     public (int Imagine, string Spec, int Count)[] Counts()
     {
         var scores = new Dictionary<(int Imagine, string Spec), int>();
+        foreach (var (imagine, spec, count) in _seed) scores[(imagine, spec)] = count;
         foreach (var player in _players.Values)
         {
             foreach (var imagine in player.Imagines)
@@ -80,6 +104,8 @@ public sealed class ImagineCatalog
     };
 
     sealed record FileBody(Row[] Players);
+
+    sealed record SeedBody(JsonElement[][] Rows);
 
     sealed record Row(long Id, string Spec, int[] Imagines);
 }

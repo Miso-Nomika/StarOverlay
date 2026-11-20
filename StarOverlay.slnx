@@ -17,10 +17,4 @@
     <Project Path="samples/StarOverlay.BuffTracker/StarOverlay.BuffTracker.csproj" />
     <Project Path="samples/StarOverlay.Chat/StarOverlay.Chat.csproj" />
   </Folder>
-  <Folder Name="/tests/">
-    <Project Path="tests/StarOverlay.Core.Tests/StarOverlay.Core.Tests.csproj" />
-    <Project Path="tests/StarOverlay.Framework.Tests/StarOverlay.Framework.Tests.csproj" />
-    <Project Path="tests/StarOverlay.Game.Tests/StarOverlay.Game.Tests.csproj" />
-    <Project Path="tests/StarOverlay.App.Tests/StarOverlay.App.Tests.csproj" />
-  </Folder>
 </Solution>

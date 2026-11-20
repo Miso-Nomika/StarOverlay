@@ -39,6 +39,7 @@ public class AgentBehaviour : MonoBehaviour
             _ui.Tick();
             GameChatInput.Poll();
             StickerCache.Poll();
+            ItemCardMover.Poll();
             TabIcons.Poll();
             GameBuffBar.Poll();
             CardSeeker.Poll();

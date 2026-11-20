@@ -53,7 +53,7 @@ public partial class ShellViewModel
         }
 
         RefreshLibrary();
-        Status = $"{info.Name}을 라이브러리에 넣었습니다.";
+        Status = $"{info.Name} 플러그인을 보관함에 추가했습니다.";
     }
 
     private void ActOnPlugin(string id)
@@ -70,14 +70,14 @@ public partial class ShellViewModel
     {
         if (SelectedClient is null)
         {
-            Status = "클라이언트를 먼저 선택하세요.";
+            Status = "먼저 게임을 선택해 주세요.";
             return;
         }
 
         var entry = PluginLibrary.List(_libraryRoot).FirstOrDefault(plugin => plugin.Id == id);
         if (entry is null)
         {
-            Status = "라이브러리에서 플러그인을 찾지 못했습니다.";
+            Status = "보관함에서 플러그인을 찾지 못했습니다.";
             return;
         }
 

@@ -61,7 +61,7 @@ internal sealed partial class SettingsView
     {
         _root = root;
         _plugin = plugin;
-        _window = UiKit.Node("Settings_" + plugin, root.Canvas.transform);
+        _window = UiKit.Node("Settings_" + plugin, root.SharedParent);
         _panel = UiKit.Node("Panel", _window.transform);
         UiKit.Stretch(_panel);
         UiKit.Stretch(UiKit.Box("Background", _panel.transform, Panel, raycast: true).gameObject);
@@ -107,6 +107,14 @@ internal sealed partial class SettingsView
             _live = null;
             Dirty(); // the body is laid out for the new size
         });
+    }
+
+    /// <summary>Moves the window under another canvas (once the shared camera canvas exists); a window already there stays.</summary>
+    public void MoveTo(Transform canvas)
+    {
+        if (_window == null || _window.transform.parent == canvas) return;
+        _window.transform.SetParent(canvas, false);
+        UiKit.SetLayer(_window, canvas.gameObject.layer);
     }
 
     public void Destroy()

@@ -146,7 +146,7 @@ public sealed class GameInstallFinder : IGameInstallFinder
             current = parent;
         }
 
-        return "클라이언트";
+        return "게임";
     }
 
     private static Version ReleaseVersion(string directoryName)

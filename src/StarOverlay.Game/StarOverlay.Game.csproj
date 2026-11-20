@@ -11,6 +11,9 @@
     <EmbeddedResource Include="Data\SkillNames.ko.json">
       <LogicalName>StarOverlay.Game.Data.SkillNames.ko.json</LogicalName>
     </EmbeddedResource>
+    <EmbeddedResource Include="Data\ImagineSeed.json">
+      <LogicalName>StarOverlay.Game.Data.ImagineSeed.json</LogicalName>
+    </EmbeddedResource>
     <EmbeddedResource Include="Data\AccessoryOptions.txt">
       <LogicalName>StarOverlay.Game.Data.AccessoryOptions.txt</LogicalName>
     </EmbeddedResource>

@@ -29,6 +29,8 @@ static class TableDump
         new("DungeonsTable", ["Id", "SceneID", "PlayType"]),
         new("MonsterTable", ["Id", "MonsterType"]),
         new("ItemTable", ["Id", "Name", "Quality", "Description", "Icon"]),
+        new("EquipTable", ["Id", "EquipPart", "EquipProfession", "AdvancedAttrLibId"]),
+        new("EquipAttrLibTable", ["Id", "AttrLibId", "AttrEffect"]),
     ];
 
     const float StartDelay = 15f;      // seconds with the chat bar on the screen (the game has logged in and loaded its tables)

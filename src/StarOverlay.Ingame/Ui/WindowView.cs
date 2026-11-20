@@ -47,11 +47,13 @@ internal sealed class WindowView
 
     public string Id { get; }
 
+    public GameObject WindowObject => _window;
+
     public WindowView(UiRoot root, string id)
     {
         _root = root;
         Id = id;
-        _window = UiKit.Node("Window_" + id, root.Canvas.transform);
+        _window = UiKit.Node("Window_" + id, root.ParentOf(id));
         _panel = UiKit.Node("Panel", _window.transform);
         UiKit.Stretch(_panel);
         UiKit.Box("Background", _panel.transform, Panel, raycast: true); // catches the mouse wheel over empty areas
@@ -172,6 +174,14 @@ internal sealed class WindowView
         _body.SetActive(true);
         ApplyLayout(layout);
         FillBody(dto, layout);
+    }
+
+    /// <summary>Moves the window under another canvas (the chat window, once its camera canvas exists); a window already there stays.</summary>
+    public void MoveTo(Transform canvas)
+    {
+        if (_window == null || _window.transform.parent == canvas) return;
+        _window.transform.SetParent(canvas, false);
+        UiKit.SetLayer(_window, canvas.gameObject.layer);
     }
 
     public void Destroy()

@@ -54,8 +54,8 @@ static class Cli
         say($"게임 폴더: {game}");
         if (args.Contains("--status", StringComparer.OrdinalIgnoreCase))
         {
-            say("인게임 표시: " + IngameDeployer.State(game, payload?.IngamePackage));
-            say("수신 도우미: " + (OperatingSystem.IsWindows() ? CaptureSetup.Check(payload?.CaptureExe).ToString() : "-"));
+            say("오버레이: " + StateText(IngameDeployer.State(game, payload?.IngamePackage)));
+            say("수신 도우미: " + (OperatingSystem.IsWindows() ? StateText(CaptureSetup.Check(payload?.CaptureExe)) : "-"));
             say("옛 설치 흔적: " + (LegacyInstall.Find(game).Count == 0 ? "없음" : string.Join(", ", LegacyInstall.Find(game))));
             return 0;
         }
@@ -79,7 +79,7 @@ static class Cli
         if (!report.Success) return 1;
         if (OperatingSystem.IsWindows() && !args.Contains("--no-capture", StringComparer.OrdinalIgnoreCase) && CaptureSetup.Check(payload.CaptureExe) != CaptureState.Ready)
         {
-            say("게임 통신 수신을 설정합니다(관리자 확인 1회)...");
+            say("전투 정보 수신을 설정합니다(관리자 확인 1회)...");
             var capture = CaptureSetup.Install(payload.CaptureExe);
             say(capture.Message);
             if (!capture.Success) return 1;
@@ -87,6 +87,21 @@ static class Cli
 
         return 0;
     }
+
+    static string StateText(IngameState state) => state switch
+    {
+        IngameState.InstalledOn => "설치됨",
+        IngameState.InstalledOff => "설치됨 (꺼짐)",
+        IngameState.Outdated => "새 버전이 있음",
+        _ => "설치 안 됨",
+    };
+
+    static string StateText(CaptureState state) => state switch
+    {
+        CaptureState.Ready => "준비됨",
+        CaptureState.Outdated => "새 버전이 있음",
+        _ => "설정 필요",
+    };
 
     static string? ValueOf(string[] args, string name)
     {

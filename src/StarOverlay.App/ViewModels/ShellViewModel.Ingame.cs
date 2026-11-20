@@ -7,7 +7,7 @@ using CommunityToolkit.Mvvm.Input;
 
 namespace StarOverlay.App.ViewModels;
 
-/// <summary>"인게임 설치": puts the in-game loader, the standard plugins and the receiving helper on the PC, and takes them off again.</summary>
+/// <summary>"오버레이 설치": puts the in-game loader, the standard plugins and the receiving helper on the PC, and takes them off again.</summary>
 public partial class ShellViewModel
 {
     private PayloadPaths? _payload;
@@ -15,7 +15,7 @@ public partial class ShellViewModel
     private readonly Func<string, Task<string>>? _captureInstaller; // tests replace the administrator step
 
     [ObservableProperty]
-    private string _ingameText = "클라이언트를 선택하면 인게임 표시를 설치할 수 있습니다.";
+    private string _ingameText = "게임을 선택하면 오버레이를 설치할 수 있습니다.";
 
     [ObservableProperty]
     private string _ingameActionLabel = "설치";
@@ -50,7 +50,7 @@ public partial class ShellViewModel
         if (SelectedClient is null || !Directory.Exists(SelectedClient.InstallPath))
         {
             IngameText = SelectedClient is null
-                ? "클라이언트를 선택하면 인게임 표시를 설치할 수 있습니다."
+                ? "게임을 선택하면 오버레이를 설치할 수 있습니다."
                 : "게임 폴더를 찾지 못했습니다.";
             ShowIngameAction = false;
             CanUninstall = false;
@@ -60,7 +60,7 @@ public partial class ShellViewModel
 
         if (_payload is null)
         {
-            IngameText = "설치 파일을 찾지 못했습니다. 이 프로그램을 다시 내려받으세요.";
+            IngameText = "설치 파일을 찾지 못했습니다. 이 프로그램을 다시 내려받아 주세요.";
             ShowIngameAction = false;
             CanUninstall = false;
             RefreshCapture();
@@ -73,7 +73,7 @@ public partial class ShellViewModel
         switch (state)
         {
             case IngameState.InstalledOn:
-                IngameText = "설치되어 있습니다. 게임을 켜면 자동으로 화면에 표시됩니다.";
+                IngameText = "설치되어 있습니다. 게임을 켜면 자동으로 화면에 나타납니다.";
                 IngameActionLabel = "다시 설치";
                 break;
             case IngameState.InstalledOff:
@@ -121,12 +121,12 @@ public partial class ShellViewModel
             }
             else if (OperatingSystem.IsWindows() && CaptureSetup.Check(payload.CaptureExe) != CaptureState.Ready)
             {
-                Status = "게임 통신 수신을 설정합니다. 관리자 확인이 한 번 뜹니다...";
+                Status = "전투 정보 수신을 설정합니다. 관리자 확인이 한 번 뜹니다...";
                 var capture = await Task.Run(() => CaptureSetup.Install(payload.CaptureExe));
                 message += " " + capture.Message;
             }
 
-            Status = message + " 게임을 켜면 화면에 표시됩니다.";
+            Status = message + " 게임을 켜면 화면에 나타납니다.";
         }
         finally
         {

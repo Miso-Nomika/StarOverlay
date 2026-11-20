@@ -23,27 +23,43 @@ public sealed partial class GameCapture
 
     static void ReadEquip(CodedInputStream reader, Fighter fighter)
     {
-        var high = false;
-        var low = false;
-        var profession = 0;
-        var weaponJob = 0;
-        var stats = new List<string>(8);
+        var equips = new List<(int Id, int Slot)>(12);
         while (!reader.IsAtEnd)
         {
             reader.ReadLength();
             var equip = new EquipNine();
             reader.ReadMessage(equip);
-            var farSea = FarSeaGear.WeaponOf(equip.EquipID);
+            equips.Add((equip.EquipID, (int)equip.Slot));
+        }
+
+        fighter.Equips = equips.ToArray();
+        ApplyEquip(fighter);
+    }
+
+    /// <summary>
+    /// Reads the job and the accessory options out of what a person wears. Kept apart from reading the packet so it can run again when the
+    /// game's equipment tables arrive after the person was seen (the options are worked out from those tables).
+    /// </summary>
+    static void ApplyEquip(Fighter fighter)
+    {
+        var high = false;
+        var low = false;
+        var profession = 0;
+        var weaponJob = 0;
+        var stats = new List<string>(8);
+        foreach (var (equipId, slot) in fighter.Equips)
+        {
+            var farSea = FarSeaGear.WeaponOf(equipId);
             if (farSea == FarSeaGear.RealWeapon) high = true;
             else if (farSea == FarSeaGear.OldWeapon) low = true;
-            if (AccessoryGear.TryOptions(equip.EquipID, out var first, out var second))
+            if (AccessoryGear.TryOptions(equipId, out var first, out var second))
             {
                 stats.Add(first);
                 stats.Add(second);
             }
 
-            if (!AccessoryGear.TryProfession(equip.EquipID, out var job)) continue;
-            if (equip.Slot == 200) weaponJob = job;
+            if (!AccessoryGear.TryProfession(equipId, out var job)) continue;
+            if (slot == 200) weaponJob = job;
             else if (profession == 0) profession = job;
         }
 
@@ -52,6 +68,22 @@ public sealed partial class GameCapture
         if (fighter.ProfessionId == 0)
             fighter.ProfessionId = weaponJob != 0 ? weaponJob : profession;
         fighter.Accessory = stats.ToArray();
+    }
+
+    /// <summary>The equipment tables arrived: everybody seen so far is judged again from what they wear.</summary>
+    void RecomputeEquip()
+    {
+        lock (_gate)
+        {
+            foreach (var fighter in _fighters.Values)
+            {
+                if (fighter.Equips.Length == 0) continue;
+                ApplyEquip(fighter);
+                TryGearSpec(fighter);
+            }
+
+            RefreshImagineSpecs();
+        }
     }
 
     static void TryGearSpec(Fighter fighter)
@@ -267,6 +299,11 @@ public sealed partial class GameCapture
     {
         try
         {
+            using (var seed = typeof(GameCapture).Assembly.GetManifestResourceStream("StarOverlay.Game.Data.ImagineSeed.json"))
+            {
+                if (seed != null) _imagineCatalog.UseSeed(new StreamReader(seed, Encoding.UTF8).ReadToEnd());
+            }
+
             var path = ImagineFile();
             if (!File.Exists(path)) return;
             _imagineCatalog.Restore(File.ReadAllText(path));

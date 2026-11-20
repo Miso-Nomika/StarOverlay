@@ -21,7 +21,7 @@ public static class ModInstaller
         var home = modHome ?? ModHome.Prepare(game); // also brings over plugins an old install kept in the game folder
         var result = IngameDeployer.Install(game, payload.IngamePackage, payload.HostExe, isGameRunning);
         if (!result.Success) return new InstallReport(false, result.Message, done);
-        done.Add("인게임 표시 설치");
+        done.Add("오버레이 설치");
 
         foreach (var removed in IngameDeployer.ReadManifest(game)?.Removed ?? [])
             done.Add("옛 설치 정리: " + removed);

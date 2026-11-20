@@ -34,11 +34,12 @@ internal sealed class UiRoot
     {
         // hidden by a group (alpha 0, no clicks), never by switching the canvas object off and on: the game walks through the canvases it
         // finds and switches them as it likes, and a canvas that is off at that moment is not brought back by it
-        if (_group != null)
+        foreach (var group in new[] { _group, _chatGroup, _windowsGroup })
         {
-            _group.alpha = visible ? 1f : 0f;
-            _group.blocksRaycasts = visible;
-            _group.interactable = visible;
+            if (group == null) continue;
+            group.alpha = visible ? 1f : 0f;
+            group.blocksRaycasts = visible;
+            group.interactable = visible;
         }
 
         if (!visible) _wasVisible = false;
@@ -60,10 +61,12 @@ internal sealed class UiRoot
         try
         {
             if (!Canvas.enabled) Canvas.enabled = true;
+            if (ChatCanvas != null && !ChatCanvas.enabled) ChatCanvas.enabled = true;
+            if (WindowsCanvas != null && !WindowsCanvas.enabled) WindowsCanvas.enabled = true;
 
             var top = 0;
             foreach (var other in UnityEngine.Object.FindObjectsOfType<Canvas>())
-                if (other != null && other != Canvas && other.isRootCanvas && other.enabled && other.sortingOrder > top) top = other.sortingOrder;
+                if (other != null && other != Canvas && other != ChatCanvas && other != WindowsCanvas && other.isRootCanvas && other.enabled && other.sortingOrder > top) top = other.sortingOrder;
             if (Canvas.sortingOrder <= top) Canvas.sortingOrder = top + 1;
 
         }
@@ -78,6 +81,103 @@ internal sealed class UiRoot
         if (_canvasObject != null) return;
         _canvasObject = MakeCanvas("StarOverlayCanvas", 5000, out var canvas, out _group);
         Canvas = canvas;
+    }
+
+    // Our windows are drawn by the game's own camera, over the game's main screen (300: the boss bar and the rest of the HUD) and under its function
+    // layer (600: the character card and the other windows our clicks open; the item card at 2710 is over everything). The game's invisible click areas
+    // in the main layer do not catch the clicks meant for our windows. The channel tab, which opens inside the main layer, is shown by sending the
+    // chat just under that layer while it is open.
+    // An overlay canvas is always drawn over every camera canvas, whatever its order, which is why the chat could not be lowered while it lived on
+    // the overlay canvas.
+    const int ChatOrder = 590;
+    const int ChatOrderTabOpen = 299;
+    // All the other windows (meter, tracker, party join, settings, the system window, notes) are drawn by the same camera on a canvas of their own,
+    // just over the chat, while the chat alone goes under the main layer when the channel tab is open (the other windows keep their place, and
+    // their clicks, meanwhile).
+    const int WindowsOrder = 591;
+    GameObject _windowsObject;
+    CanvasGroup _windowsGroup;
+    float _nextTabCheck;
+    bool _tabOpen;
+    GameObject _chatObject;
+    CanvasGroup _chatGroup;
+    float _nextChatSearch;
+
+    /// <summary>
+    /// While the channel tab is open the chat is under the game's main layer, whose invisible click catcher takes the clicks, so a click in the
+    /// chat is read from the mouse itself: a click in the chat window that is not on the tab's list closes the tab (the game's channel button is pressed,
+    /// as the user would to close it).
+    /// </summary>
+    void CloseTabOnChatClick(WindowView chat)
+    {
+        try
+        {
+            if (!Input.GetMouseButtonDown(0)) return;
+            var camera = ChatCanvas.worldCamera;
+            var mouse = Input.mousePosition;
+            var at = new Vector2(mouse.x, mouse.y);
+            var rect = chat.WindowObject.GetComponent<RectTransform>();
+            if (rect == null || !RectTransformUtility.RectangleContainsScreenPoint(rect, at, camera)) return;
+            if (GameChatUi.ChannelTabContains(at, camera)) return; // a click on a channel of the list is the game's own
+            GameChatUi.CloseChannelTab();
+        }
+        catch (Exception e)
+        {
+            Plugin.L.LogWarning("channel tab close: " + e.Message);
+        }
+    }
+
+    public Canvas ChatCanvas { get; private set; }
+
+    /// <summary>The camera canvas of every window but the chat (null until the game's camera is known).</summary>
+    public Canvas WindowsCanvas { get; private set; }
+
+    /// <summary>Where the window of a plugin is drawn: on the camera canvases once the game's camera is known (the chat on its own), before that on the overlay canvas.</summary>
+    public Transform ParentOf(string id) => id == "chat" ? (ChatCanvas != null ? ChatCanvas.transform : Canvas.transform) : SharedParent;
+
+    /// <summary>The parent of the windows that share a canvas (everything but the chat).</summary>
+    public Transform SharedParent => WindowsCanvas != null ? WindowsCanvas.transform : Canvas.transform;
+
+    /// <summary>Makes the camera canvases (the chat's and the other windows') as soon as the game's root canvas (and its camera) exists; keeps them on that camera.</summary>
+    void EnsureChatCanvas()
+    {
+        if (ChatCanvas != null && ChatCanvas.worldCamera != null && WindowsCanvas != null && WindowsCanvas.worldCamera != null) return;
+        if (Time.realtimeSinceStartup < _nextChatSearch) return;
+        _nextChatSearch = Time.realtimeSinceStartup + 0.5f;
+        try
+        {
+            foreach (var game in UnityEngine.Object.FindObjectsOfType<Canvas>())
+            {
+                if (game == null || !game.isRootCanvas || game.name != "zuiroot" || game.renderMode == RenderMode.ScreenSpaceOverlay || game.worldCamera == null) continue;
+                if (_chatObject == null)
+                {
+                    _chatObject = MakeCanvas("StarOverlayChatCanvas", ChatOrder, out var canvas, out _chatGroup);
+                    ChatCanvas = canvas;
+                    _chatObject.layer = game.gameObject.layer; // the game's camera draws only its UI layer
+                }
+
+                if (_windowsObject == null)
+                {
+                    _windowsObject = MakeCanvas("StarOverlayWindowsCanvas", WindowsOrder, out var canvas, out _windowsGroup);
+                    WindowsCanvas = canvas;
+                    _windowsObject.layer = game.gameObject.layer;
+                }
+
+                foreach (var ours in new[] { ChatCanvas, WindowsCanvas })
+                {
+                    ours.renderMode = RenderMode.ScreenSpaceCamera;
+                    ours.worldCamera = game.worldCamera;
+                    ours.planeDistance = game.planeDistance;
+                    ours.sortingLayerID = game.sortingLayerID;
+                }
+
+                return;
+            }
+        }
+        catch (Exception e)
+        {
+            Plugin.L.LogWarning("chat canvas: " + e.Message);
+        }
     }
 
     static GameObject MakeCanvas(string name, int order, out Canvas canvas, out CanvasGroup group)
@@ -171,7 +271,7 @@ internal sealed class UiRoot
         if (anchor == null || string.IsNullOrEmpty(text) || Canvas == null) return;
         if (_tip == null)
         {
-            _tip = UiKit.Node("Tooltip", Canvas.transform);
+            _tip = UiKit.Node("Tooltip", SharedParent);
             var back = UiKit.Box("Back", _tip.transform, new Color(0.04f, 0.05f, 0.07f, 0.96f));
             UiKit.Stretch(back.gameObject);
             _tipText = UiKit.Text("Text", _tip.transform, 14, Color.white, TMPro.TextAlignmentOptions.MidlineLeft);
@@ -185,7 +285,11 @@ internal sealed class UiRoot
         var width = Math.Min(560.0, Math.Max(60.0, MeasureWidth(text) + 16));
         var lines = text.Split('\n').Length;
         var rt = UiKit.Rt(anchor);
-        var screen = rt.position; // overlay canvas: world position = screen pixels
+        // the anchor's world position as screen pixels (on the overlay canvas they are the same; on a camera canvas the camera tells)
+        var anchorCanvas = anchor.GetComponentInParent<Canvas>();
+        var anchorRoot = anchorCanvas == null ? null : anchorCanvas.rootCanvas;
+        var anchorCamera = anchorRoot != null && anchorRoot.renderMode != RenderMode.ScreenSpaceOverlay ? anchorRoot.worldCamera : null;
+        var screen = RectTransformUtility.WorldToScreenPoint(anchorCamera, rt.position);
         var x = screen.x / Scale;
         var y = (Screen.height - screen.y) / Scale + rt.rect.height + 4;
         var maxX = Screen.width / Scale - width - 4;
@@ -215,6 +319,29 @@ internal sealed class UiRoot
         foreach (var window in _windows.Values) window.Tick();
         if (_tip != null && _tip.activeSelf && (_tipOwner == null || !_tipOwner.activeInHierarchy)) _tip.SetActive(false); // the icon went away while hovered
         if (Canvas != null) Scale = Math.Max(0.1f, Canvas.scaleFactor);
+        EnsureChatCanvas();
+        WindowView chat = null;
+        if (ChatCanvas != null && _windows.TryGetValue("chat", out chat)) chat.MoveTo(ChatCanvas.transform); // the camera canvas came after the window
+        if (WindowsCanvas != null)
+        {
+            foreach (var pair in _windows) if (pair.Key != "chat") pair.Value.MoveTo(WindowsCanvas.transform);
+            foreach (var view in _settings.Values) view.MoveTo(WindowsCanvas.transform);
+            if (_tip != null && _tip.transform.parent != WindowsCanvas.transform)
+            {
+                _tip.transform.SetParent(WindowsCanvas.transform, false);
+                UiKit.SetLayer(_tip, WindowsCanvas.gameObject.layer);
+            }
+        }
+
+        if (ChatCanvas != null && Time.realtimeSinceStartup >= _nextTabCheck)
+        {
+            _nextTabCheck = Time.realtimeSinceStartup + 0.1f;
+            _tabOpen = GameChatUi.ChannelTabOpen();
+            var order = _tabOpen ? ChatOrderTabOpen : ChatOrder;
+            if (ChatCanvas.sortingOrder != order) ChatCanvas.sortingOrder = order;
+        }
+        if (_tabOpen && chat != null && ChatCanvas != null) CloseTabOnChatClick(chat);
+
         DropKeyboardFocus();
     }
 
@@ -227,7 +354,7 @@ internal sealed class UiRoot
     {
         var system = UnityEngine.EventSystems.EventSystem.current;
         var selected = system != null ? system.currentSelectedGameObject : null;
-        if (selected != null && Canvas != null && selected.transform.IsChildOf(Canvas.transform))
+        if (selected != null && Canvas != null && (selected.transform.IsChildOf(Canvas.transform) || (ChatCanvas != null && selected.transform.IsChildOf(ChatCanvas.transform)) || (WindowsCanvas != null && selected.transform.IsChildOf(WindowsCanvas.transform))))
             system.SetSelectedGameObject(null);
     }
 
@@ -235,6 +362,7 @@ internal sealed class UiRoot
     public void Apply(List<WindowDto> windows)
     {
         Ensure();
+        EnsureChatCanvas();
         _last = windows;
         GameBuffBar.Hide(windows.Exists(w => w.Id == "buff.tracker")); // the tracker shows the buffs: the game's own bar goes away while it runs
         var ids = new HashSet<string>();
