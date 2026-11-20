@@ -106,6 +106,15 @@ public partial class ShellViewModel
         NotifyIngameCommands();
         try
         {
+            if (GameFolderAccess.NeedsElevation(client.InstallPath))
+            {
+                // a protected place (Program Files): the same install runs again with administrator rights, one confirmation for all of it
+                Status = "게임 폴더가 보호된 위치에 있어 관리자 확인이 한 번 뜹니다...";
+                var elevated = await Task.Run(() => GameFolderAccess.RunElevated($"--install --game \"{client.InstallPath}\""));
+                Status = elevated.Success ? "설치를 마쳤습니다. 게임을 켜면 화면에 나타납니다." : elevated.Message;
+                return;
+            }
+
             Status = "설치하는 중...";
             var report = await Task.Run(() => ModInstaller.Install(client.InstallPath, payload, _isGameRunning));
             if (!report.Success)
@@ -144,6 +153,14 @@ public partial class ShellViewModel
         NotifyIngameCommands();
         try
         {
+            if (GameFolderAccess.NeedsElevation(client.InstallPath))
+            {
+                Status = "게임 폴더가 보호된 위치에 있어 관리자 확인이 한 번 뜹니다...";
+                var elevated = await Task.Run(() => GameFolderAccess.RunElevated($"--uninstall --game \"{client.InstallPath}\""));
+                Status = elevated.Success ? "제거했습니다. 플러그인 설정과 전투 기록은 데이터 폴더에 그대로 있습니다." : elevated.Message;
+                return;
+            }
+
             var report = await Task.Run(() => ModInstaller.Uninstall(client.InstallPath, _isGameRunning));
             Status = report.Message;
         }

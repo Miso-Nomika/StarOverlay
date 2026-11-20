@@ -50,6 +50,15 @@ static class Cli
             return 2;
         }
 
+        if (!args.Contains("--status", StringComparer.OrdinalIgnoreCase) && GameFolderAccess.NeedsElevation(game))
+        {
+            // a protected game folder (Program Files): the same command runs again with administrator rights
+            say("게임 폴더가 보호된 위치에 있어 관리자 권한으로 다시 실행합니다(확인 1회)...");
+            var again = GameFolderAccess.RunElevated(string.Join(' ', args.Select(arg => arg.Contains(' ') ? "\"" + arg + "\"" : arg)));
+            say(again.Success ? "관리자 권한으로 마쳤습니다. 결과는 setup.log에 있습니다." : again.Message);
+            return again.Success ? 0 : 1;
+        }
+
         var payload = PayloadStore.Find(typeof(Cli).Assembly, AppStorage.Root(), AppContext.BaseDirectory, AppStorage.ProjectRoot());
         say($"게임 폴더: {game}");
         if (args.Contains("--status", StringComparer.OrdinalIgnoreCase))
