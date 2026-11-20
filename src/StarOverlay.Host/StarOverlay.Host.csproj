@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net9.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>StarOverlay.Host</RootNamespace>
+    <PlatformTarget>x64</PlatformTarget>
+    <!-- the runtime's own texts in 13 languages are 13 MB: only Korean (and the English fallback) are shipped -->
+    <SatelliteResourceLanguages>en;ko</SatelliteResourceLanguages>
+    <!-- what Task Manager shows for this background process -->
+    <Product>Star Overlay</Product>
+    <AssemblyTitle>Star Overlay 백그라운드 서비스</AssemblyTitle>
+    <Description>게임 안 표시에 데이터를 보내는 백그라운드 서비스(게임이 꺼지면 함께 종료)</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="..\StarOverlay.App\Assets\Fonts\Pretendard-Bold.ttf">
+      <LogicalName>StarOverlay.Host.Fonts.Pretendard-Bold.ttf</LogicalName>
+    </EmbeddedResource>
+    <Content Include="..\StarOverlay.App\Assets\Fonts\OFL.txt" Link="Pretendard-OFL.txt" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\StarOverlay.Core\StarOverlay.Core.csproj" />
+    <ProjectReference Include="..\StarOverlay.Framework\StarOverlay.Framework.csproj" />
+    <ProjectReference Include="..\StarOverlay.Game\StarOverlay.Game.csproj" />
+  </ItemGroup>
+
+</Project>

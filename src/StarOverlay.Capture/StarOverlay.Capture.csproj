@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>StarOverlay.Capture</RootNamespace>
+    <SupportedOSPlatform>windows</SupportedOSPlatform>
+    <AssemblyName>StarOverlay.Capture</AssemblyName>
+    <PlatformTarget>x64</PlatformTarget>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <PublishAot>true</PublishAot>
+    <OptimizationPreference>Size</OptimizationPreference>
+    <StackTraceSupport>false</StackTraceSupport>
+    <UseSystemResourceKeys>true</UseSystemResourceKeys>
+    <Product>Star Overlay</Product>
+    <AssemblyTitle>Star Overlay 게임 통신 수신 도우미</AssemblyTitle>
+    <Description>Npcap 없이 게임 패킷을 받는 도우미(게임이나 서비스가 끝나면 함께 종료)</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="..\StarOverlay.Game\Packets\PacketFrames.cs" Link="PacketFrames.cs" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>StarOverlay.Game</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Data\SkillNames.ko.json">
+      <LogicalName>StarOverlay.Game.Data.SkillNames.ko.json</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Data\AccessoryOptions.txt">
+      <LogicalName>StarOverlay.Game.Data.AccessoryOptions.txt</LogicalName>
+    </EmbeddedResource>
+    <Content Include="Data\SkillNames.ko.json" Link="SkillNames.ko.json" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Data\BuffText.ko.json" Link="BuffText.ko.json" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Data\SceneNames.ko.json" Link="SceneNames.ko.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="StarOverlay.Game.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\StarOverlay.Core\StarOverlay.Core.csproj" />
+    <ProjectReference Include="..\StarOverlay.Ingame.Protocol\StarOverlay.Ingame.Protocol.csproj" />
+    <ProjectReference Include="..\StarOverlay.Framework\StarOverlay.Framework.csproj" />
+    <ProjectReference Include="..\..\third_party\BPSR-ZDPSLib\BPSR-ZDPSLib.csproj" />
+  </ItemGroup>
+
+</Project>

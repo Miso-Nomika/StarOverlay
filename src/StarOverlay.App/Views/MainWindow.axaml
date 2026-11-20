@@ -1,0 +1,95 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:StarOverlay.App.ViewModels"
+        xmlns:model="using:StarOverlay.Core.Model"
+        x:Class="StarOverlay.App.Views.MainWindow"
+        x:DataType="vm:ShellViewModel"
+        Title="Star Overlay"
+        FontFamily="avares://StarOverlay.App/Assets/Fonts#Pretendard"
+        FontWeight="Bold"
+        Width="960" Height="640"
+        MinWidth="800" MinHeight="520"
+        WindowStartupLocation="CenterScreen">
+  <Grid ColumnDefinitions="240,*">
+    <Border Grid.Column="0" Padding="20,24" BorderThickness="0,0,1,0"
+            BorderBrush="{DynamicResource SystemControlForegroundBaseMediumLowBrush}">
+      <DockPanel>
+        <StackPanel DockPanel.Dock="Top" Spacing="4" Margin="0,0,0,28">
+          <TextBlock Text="Star Overlay" FontSize="22" FontWeight="Bold"/>
+          <TextBlock Text="게임 안 표시 설치" Opacity="0.7"/>
+        </StackPanel>
+        <TextBlock Text="게임 설치본을 고르고 설치를 누르면 끝입니다. 게임을 켜면 화면에 미터기·채팅·파티 신청이 나옵니다." TextWrapping="Wrap" Opacity="0.75"/>
+      </DockPanel>
+    </Border>
+
+    <DockPanel Grid.Column="1" Margin="24">
+      <TextBlock DockPanel.Dock="Bottom" Margin="0,16,0,0" Text="{Binding Status}" Opacity="0.85" TextWrapping="Wrap"/>
+
+      <Grid ColumnDefinitions="320,*">
+        <DockPanel Margin="0,0,20,0">
+          <StackPanel DockPanel.Dock="Top" Spacing="8" Margin="0,0,0,8">
+            <TextBlock Text="클라이언트" FontWeight="Bold"/>
+            <Button Content="설치본 찾기" MinWidth="108" HorizontalAlignment="Left" Command="{Binding FindInstallsCommand}"/>
+          </StackPanel>
+          <Button DockPanel.Dock="Bottom" Content="선택 제거" HorizontalAlignment="Left" Margin="0,8,0,0" Command="{Binding RemoveSelectedCommand}"/>
+          <TextBlock Text="아직 없습니다." IsVisible="{Binding ShowEmptyClients}" Opacity="0.7" VerticalAlignment="Top"/>
+          <ListBox ItemsSource="{Binding Clients}" SelectedItem="{Binding SelectedClient}" IsVisible="{Binding HasClients}">
+            <ListBox.ItemTemplate>
+              <DataTemplate x:DataType="model:GameClient">
+                <StackPanel Margin="2" Spacing="2">
+                  <TextBlock Text="{Binding DisplayName}" FontWeight="Bold"/>
+                  <TextBlock Text="{Binding InstallPath}" FontSize="12" Opacity="0.7" TextTrimming="CharacterEllipsis"/>
+                </StackPanel>
+              </DataTemplate>
+            </ListBox.ItemTemplate>
+          </ListBox>
+        </DockPanel>
+
+        <ScrollViewer Grid.Column="1">
+          <StackPanel Spacing="12">
+            <TextBlock Text="인게임 표시" FontWeight="Bold"/>
+            <TextBlock Text="{Binding IngameText}" TextWrapping="Wrap" Opacity="0.85"/>
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <Button Content="{Binding IngameActionLabel}" IsVisible="{Binding ShowIngameAction}"
+                      IsEnabled="{Binding !IngameBusy}" Command="{Binding InstallIngameCommand}"/>
+              <Button Content="제거" IsVisible="{Binding CanUninstall}" Command="{Binding UninstallIngameCommand}"/>
+            </StackPanel>            <TextBlock Text="게임 통신 수신" FontWeight="Bold"/>
+            <TextBlock Text="{Binding CaptureText}" TextWrapping="Wrap" Opacity="0.85"/>
+            <Button Content="{Binding CaptureActionLabel}" HorizontalAlignment="Left"
+                    IsVisible="{Binding ShowCaptureAction}" IsEnabled="{Binding !CaptureBusy}" Command="{Binding SetupCaptureCommand}"/>
+            <TextBlock Text="플러그인 라이브러리" FontWeight="Bold"/>
+            <TextBlock Text="보관된 플러그인이 없습니다." IsVisible="{Binding ShowEmptyLibrary}" Opacity="0.7"/>
+            <ItemsControl ItemsSource="{Binding Library}" IsVisible="{Binding HasLibrary}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="vm:LibraryRowViewModel">
+                  <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,8">
+                    <StackPanel Spacing="2">
+                      <TextBlock Text="{Binding Name}" FontWeight="Bold"/>
+                      <TextBlock Text="{Binding Detail}" FontSize="12" Opacity="0.7"/>
+                    </StackPanel>
+                    <Button Grid.Column="1" MinWidth="72" Content="{Binding ActionLabel}"
+                            Command="{Binding ActCommand}" IsEnabled="{Binding CanAct}"/>
+                  </Grid>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+            <Button Content="라이브러리에 추가" HorizontalAlignment="Left" Command="{Binding AddToLibraryCommand}"/>
+            <TextBlock Text="저장된 세부직업" FontWeight="Bold"/>
+            <TextBlock Text="{Binding SpecsText}" TextWrapping="Wrap" Opacity="0.85"/>
+            <ListBox ItemsSource="{Binding Specs}" IsVisible="{Binding HasSpecs}" Height="220">
+              <ListBox.ItemTemplate>
+                <DataTemplate x:DataType="vm:SpecRowViewModel">
+                  <StackPanel Margin="2" Spacing="1">
+                    <TextBlock Text="{Binding Title}" FontWeight="Bold"/>
+                    <TextBlock Text="{Binding Detail}" FontSize="12" Opacity="0.7"/>
+                  </StackPanel>
+                </DataTemplate>
+              </ListBox.ItemTemplate>
+            </ListBox>
+            <Button Content="새로고침" HorizontalAlignment="Left" Command="{Binding RefreshSpecsCommand}"/>
+          </StackPanel>
+        </ScrollViewer>
+      </Grid>
+    </DockPanel>
+  </Grid>
+</Window>

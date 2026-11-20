@@ -1,0 +1,90 @@
+{
+  "dps.meter": {
+    "X": 0,
+    "Y": 0,
+    "W": 0.3304166666666678,
+    "H": 0.17500000000000052,
+    "Opacity": 90,
+    "Pinned": false,
+    "Collapsed": false,
+    "HeaderHidden": true,
+    "Channels": 63
+  },
+  "party.join": {
+    "X": 0.7810416666666666,
+    "Y": 0,
+    "W": 0.2189583333333334,
+    "H": 0.10740740740740735,
+    "Opacity": 90,
+    "Pinned": true,
+    "Collapsed": false,
+    "HeaderHidden": false,
+    "Channels": 63
+  },
+  "chat": {
+    "X": 0,
+    "Y": 0.6072222222222228,
+    "W": 0.31000000000000016,
+    "H": 0.28722222222222266,
+    "Opacity": 60,
+    "Pinned": false,
+    "Collapsed": false,
+    "HeaderHidden": true,
+    "Channels": 63
+  },
+  "root": {
+    "X": 0.3288541666666658,
+    "Y": 0,
+    "W": 0.15718749999999998,
+    "H": 0.14248148148148146,
+    "Opacity": 90,
+    "Pinned": false,
+    "Collapsed": true,
+    "HeaderHidden": false,
+    "Channels": 63
+  },
+  "dps.meter:settings": {
+    "X": 0.1465625,
+    "Y": 0.125925925925925,
+    "W": 0.57875,
+    "H": 0.8055555555555566,
+    "Opacity": 90,
+    "Pinned": false,
+    "Collapsed": false,
+    "HeaderHidden": false,
+    "Channels": 63
+  },
+  "chat:settings": {
+    "X": 0.3708333333333336,
+    "Y": 0.1598148148148147,
+    "W": 0.4,
+    "H": 0.72,
+    "Opacity": 90,
+    "Pinned": false,
+    "Collapsed": false,
+    "HeaderHidden": false,
+    "Channels": 63
+  },
+  "buff.tracker": {
+    "X": 0.34677083333333253,
+    "Y": 0.6920370370370376,
+    "W": 0.18,
+    "H": 0.12,
+    "Opacity": 90,
+    "Pinned": false,
+    "Collapsed": false,
+    "HeaderHidden": false,
+    "Channels": 63
+  },
+  "buff.tracker:settings": {
+    "X": 0.44427083333333306,
+    "Y": 0.1264814814814814,
+    "W": 0.45729166666666676,
+    "H": 0.7190740740740742,
+    "Opacity": 90,
+    "Pinned": false,
+    "Collapsed": false,
+    "HeaderHidden": false,
+    "Channels": 63
+  }
+}

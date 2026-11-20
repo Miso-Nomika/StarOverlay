@@ -1,0 +1,37 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net9.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+    <Version>0.4.0</Version>
+    <RootNamespace>StarOverlay.App</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia" Version="12.0.4" />
+    <PackageReference Include="Avalonia.Desktop" Version="12.0.4" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="12.0.4" />
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <AvaloniaResource Include="Assets\Fonts\Pretendard-Regular.ttf" />
+    <AvaloniaResource Include="Assets\Fonts\Pretendard-SemiBold.ttf" />
+    <AvaloniaResource Include="Assets\Fonts\Pretendard-Bold.ttf" />
+    <Content Include="Assets\Fonts\OFL.txt" Link="Pretendard-OFL.txt" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\StarOverlay.Core\StarOverlay.Core.csproj" />
+    <ProjectReference Include="..\StarOverlay.Framework\StarOverlay.Framework.csproj" />
+  </ItemGroup>
+
+  <!-- The released exe carries everything it installs as payload.zip (made by build/release.ps1, which passes -p:EmbedPayload=true). -->
+  <ItemGroup Condition="'$(EmbedPayload)' == 'true'">
+    <EmbeddedResource Include="..\..\artifacts\release\payload.zip" LogicalName="payload.zip" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,28 @@
+# build output
+bin/
+obj/
+artifacts/
+
+# this PC's data: settings, models, downloaded tools, the game's tables, research dumps
+local/
+
+# working notes and the checks of this PC (they are not shipped)
+TODO.md
+기능명세서.md
+CLAUDE.md
+AGENTS.md
+tests/
+
+# editors, shortcuts, logs, databases
+.vs/
+.idea/
+.vscode/
+.claude/
+*.user
+*.suo
+*.lnk
+*.log
+*.tmp
+*.db
+*.db-shm
+*.db-wal
