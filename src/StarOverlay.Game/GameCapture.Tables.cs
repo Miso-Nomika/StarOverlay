@@ -253,11 +253,13 @@ public sealed partial class GameCapture
     static void ApplyKoreanBuffs(Dictionary<int, BuffMeta> buffs)
     {
         var translations = ReadKoreanBuffs();
+        var confirmed = ReadConfirmedBuffNames();
         foreach (var id in buffs.Keys.ToArray())
         {
             var meta = buffs[id];
             translations.TryGetValue(id, out var translation);
-            var name = meta.Name.Length > 0 ? meta.Name : CombineBuffName(translation.Name, meta.Design);
+            // a name that was checked by hand stands alone, without the Chinese next to it
+            var name = meta.Name.Length > 0 ? meta.Name : confirmed.TryGetValue(id, out var sure) ? sure : CombineBuffName(translation.Name, meta.Design);
             var description = meta.Description.Length > 0 ? meta.Description : translation.Desc ?? "";
             if (name != meta.Name || description != meta.Description) buffs[id] = meta with { Name = name, Description = description };
         }
@@ -268,6 +270,29 @@ public sealed partial class GameCapture
         translated ??= "";
         if (translated.Length > 0 && design.Length > 0 && translated != design) return translated + " · " + design;
         return translated.Length > 0 ? translated : design;
+    }
+
+    /// <summary>Buff names the game leaves empty that were checked by hand (<c>BuffNames.confirmed.json</c>, id → name): they are shown as they are.</summary>
+    static Dictionary<int, string> ReadConfirmedBuffNames()
+    {
+        var map = new Dictionary<int, string>();
+        try
+        {
+            var path = Path.Combine(AppContext.BaseDirectory, "BuffNames.confirmed.json");
+            if (!File.Exists(path)) return map;
+            using var stream = File.OpenRead(path);
+            using var document = JsonDocument.Parse(stream);
+            foreach (var entry in document.RootElement.EnumerateObject())
+            {
+                var name = entry.Value.ValueKind == JsonValueKind.String ? entry.Value.GetString() ?? "" : "";
+                if (int.TryParse(entry.Name, out var id) && name.Length > 0) map[id] = name;
+            }
+        }
+        catch (Exception)
+        {
+        }
+
+        return map;
     }
 
     static Dictionary<int, (string Name, string Desc)> ReadKoreanBuffs()

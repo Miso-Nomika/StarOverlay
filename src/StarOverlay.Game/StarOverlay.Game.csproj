@@ -15,6 +15,7 @@
       <LogicalName>StarOverlay.Game.Data.AccessoryOptions.txt</LogicalName>
     </EmbeddedResource>
     <Content Include="Data\BuffText.ko.json" Link="BuffText.ko.json" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Data\BuffNames.confirmed.json" Link="BuffNames.confirmed.json" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Data\SceneNames.ko.json" Link="SceneNames.ko.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
