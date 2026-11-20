@@ -2,6 +2,8 @@
 
 블루 프로토콜: 스타 레조넌스 화면 위에 DPS 미터기·채팅·버프 트래커·파티 가입 신청 정보를 보여 주는 인게임 오버레이입니다.
 
+**[최신 버전 내려받기 (Releases)](../../releases)** · 설치 방법은 [아래](#설치)를 참고하세요.
+
 ## 기능
 
 ### DPS 미터기
@@ -40,8 +42,8 @@
 
 ## 설치
 
-1. [Releases](../../releases)에서 `StarOverlay.exe`를 받습니다. 다른 프로그램(.NET, Npcap 등)은 필요 없습니다.
-2. 게임을 끄고 `StarOverlay.exe`를 실행합니다. 게임 설치 폴더를 자동으로 찾습니다. 못 찾으면 **게임 찾기**를 눌러 폴더를 고릅니다.
+1. 맨 위 **내려받기** 링크(Releases)에서 `StarOverlay-<버전>.exe`를 받습니다. 다른 프로그램(.NET, Npcap 등)은 필요 없습니다.
+2. 게임을 끄고 받은 exe를 실행합니다. 게임 설치 폴더를 자동으로 찾습니다. 못 찾으면 **게임 찾기**를 눌러 폴더를 고릅니다.
 3. **설치**를 누릅니다. 게임 통신을 받는 도우미를 설정하느라 Windows 관리자 확인이 한 번 뜹니다.
 4. 게임을 켭니다. 화면 왼쪽 아래의 캐릭터 정보(레벨·UID)가 보이는 동안 화면 위에 창이 나타납니다. 설치 프로그램은 닫아도 됩니다.
 
@@ -64,12 +66,12 @@
 
 설치 프로그램에서 **제거**를 누르면 게임 폴더가 설치 전과 똑같이 돌아갑니다. 플러그인 설정과 전투 기록은 `%LOCALAPPDATA%\StarOverlay`에 남으니, 완전히 지우려면 이 폴더를 삭제하세요.
 
-창 없이 쓰기: `StarOverlay.exe --install`, `--uninstall`, `--status` (옵션 `--game "경로"`, `--no-capture`).
+창 없이 쓰기: `StarOverlay-<버전>.exe --install`, `--uninstall`, `--status` (옵션 `--game "경로"`, `--no-capture`).
 
 ## 개발자용
 
 ```
-build\release.ps1 -Version 0.4.1     # artifacts\release\StarOverlay.exe 를 만든다
+build\release.ps1 -Version 0.4.1     # artifacts\release\StarOverlay-0.4.1.exe 를 만든다
 ```
 
 처음 한 번은 게임이 만든 interop 파일이 `artifacts\ingame-refs`에 있어야 에이전트를 빌드할 수 있습니다. `build\pack-ingame.ps1 -NoAgent`로 로더만 설치해 게임을 한 번 켠 뒤 `build\collect-interop.ps1 -Game <폴더>`를 실행합니다.
