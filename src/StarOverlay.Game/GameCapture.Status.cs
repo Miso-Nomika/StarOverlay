@@ -33,6 +33,7 @@ public sealed partial class GameCapture
         PublishLocation();
         if ((DateTime.UtcNow - _statusAt).TotalSeconds < 1) return;
         _statusAt = DateTime.UtcNow;
+        FlushUnknownSkills();
 
         var packets = _cap?.NumSeenPackets ?? 0;
         var messages = _cap?.NumGameMessagesSeen ?? 0;

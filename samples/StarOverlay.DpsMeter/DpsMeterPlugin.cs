@@ -100,7 +100,7 @@ public sealed partial class MeterSession
         if (combat != _combatEpoch)
         {
             _combatEpoch = combat;
-            var running = !_holdClock && LiveCombat.PreserveClock;
+            var running = !_holdClock; // the clock goes on after a break out of combat; only a reset (button, end of an encounter, new map) holds it
             _holdClock = false;
             if (!running)
                 _started = DateTime.UtcNow;

@@ -23,7 +23,7 @@ static class TableDump
     static readonly Spec[] Specs =
     [
         new("SkillTable", ["Id", "Name", "SlotPositionId", "Icon"]),
-        new("BuffTable", ["Id", "Name", "Desc", "SkillId", "BuffAbilityType", "DestroyParam"]),
+        new("BuffTable", ["Id", "Name", "NameDesign", "Desc", "SkillId", "BuffAbilityType", "DestroyParam"]),
         new("SkillFightLevelTable", ["Id", "SkillId", "PVECoolTime"]),
         new("SceneTable", ["Id", "Name"]),
         new("DungeonsTable", ["Id", "SceneID", "PlayType"]),
@@ -31,6 +31,8 @@ static class TableDump
         new("ItemTable", ["Id", "Name", "Quality", "Description", "Icon"]),
         new("EquipTable", ["Id", "EquipPart", "EquipProfession", "AdvancedAttrLibId"]),
         new("EquipAttrLibTable", ["Id", "AttrLibId", "AttrEffect"]),
+        new("RecountTable", ["Id", "RecountName", "DamageId"]),
+        new("DamageAttrTable", ["Id", "TypeEnum"]),
     ];
 
     const float StartDelay = 15f;      // seconds with the chat bar on the screen (the game has logged in and loaded its tables)

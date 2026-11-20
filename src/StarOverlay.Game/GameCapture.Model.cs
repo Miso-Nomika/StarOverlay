@@ -19,7 +19,7 @@ public sealed partial class GameCapture
 {
     sealed record ImagineInfo(string Name, int Slot, string Icon);
 
-    sealed record BuffMeta(string Name, int SkillId, double Duration, string Description);
+    sealed record BuffMeta(string Name, int SkillId, double Duration, string Description, string Design = "");
 
     sealed class ActiveBuff
     {
@@ -84,7 +84,7 @@ public sealed partial class GameCapture
         {
             var skills = Skills
                 .OrderByDescending(pair => pair.Value.Damage)
-                .Select(pair => new LiveSkill(Label(skillNames, pair.Key, "스킬"), pair.Value.Damage, pair.Value.Hits, pair.Value.Crits, pair.Key, pair.Value.Luckies))
+                .Select(pair => new LiveSkill(Label(skillNames, pair.Key, "미확인"), pair.Value.Damage, pair.Value.Hits, pair.Value.Crits, pair.Key, pair.Value.Luckies))
                 .ToArray();
             var liveBuffs = Buffs.Values
                 .Where(buff => buff.Id != 0)

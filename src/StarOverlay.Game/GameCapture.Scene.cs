@@ -496,17 +496,14 @@ public sealed partial class GameCapture
     {
         string title;
         bool recordable;
-        bool master;
         lock (_gate)
         {
             var name = SceneName();
-            master = _masterScenes.Contains(_sceneId);
-            recordable = IsGuildScene(_sceneId, name) || IsVault(name) || master || _raidScenes.Contains(_sceneId) || _vaultScenes.Contains(_sceneId);
+            recordable = IsGuildScene(_sceneId, name) || IsVault(name) || _masterScenes.Contains(_sceneId) || _raidScenes.Contains(_sceneId) || _vaultScenes.Contains(_sceneId);
             title = LocationTitle(name);
         }
 
         LiveCombat.SetLocation(title, recordable);
-        LiveCombat.SetPreserveClock(master);
     }
 
     string SceneName()

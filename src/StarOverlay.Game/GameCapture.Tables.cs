@@ -28,6 +28,8 @@ public sealed partial class GameCapture
     static string SkillTable => TablePath("SkillTable.json");
     static string BuffTable => TablePath("BuffTable.json");
     static string SkillLevelTable => TablePath("SkillFightLevelTable.json");
+    static string RecountTable => TablePath("RecountTable.json");
+    static string DamageAttrTable => TablePath("DamageAttrTable.json");
     static string SceneTable => TablePath("SceneTable.json");
     static string DungeonTable => TablePath("DungeonsTable.json");
     static string MonsterTable => TablePath("MonsterTable.json");
@@ -56,6 +58,8 @@ public sealed partial class GameCapture
     internal static string? LoadedBuffName(int id) => _buffMeta.TryGetValue(id, out var meta) ? meta.Name : null;
 
     static Dictionary<int, string> _skillNames = [];
+    static Dictionary<int, int> _levelOwners = [];
+    static Dictionary<int, string> _ownerHints = [];
     static Dictionary<int, BuffMeta> _buffMeta = [];
     static HashSet<int> _cuisine = [];
     static HashSet<int> _syrup = [];
@@ -70,7 +74,8 @@ public sealed partial class GameCapture
 
     static void LoadNames()
     {
-        // the game's own Korean names come first; our translation files only hold the names the game table leaves empty
+        // every skill name comes from the game itself: the names of its damage recount first (what the game's own damage list calls a damage id),
+        // then the names of its skill table; an id with neither is unknown ("미확인 <id>")
         var skills = ReadSkills(SkillTable);
         var buffs = ReadBuffMeta(BuffTable);
         ApplyKoreanBuffs(buffs.Meta);
@@ -78,20 +83,14 @@ public sealed partial class GameCapture
         var scenes = ReadNames(SceneTable);
         var dungeons = ReadDungeons(DungeonTable);
         var gameNames = new Dictionary<int, string>(skills.Names);
-        var korean = ReadKoreanSkills();
-        foreach (var pair in korean)
-        {
-            if (skills.Names.ContainsKey(pair.Key)) continue;
-            skills.Names[pair.Key] = pair.Value;
-        }
-
+        var recount = ReadRecountNames(RecountTable, DamageAttrTable);
+        foreach (var pair in recount) skills.Names[pair.Key] = pair.Value;
         foreach (var pair in skills.Imagines.Keys.ToArray())
         {
-            if (korean.TryGetValue(pair, out var name) && skills.Imagines[pair].Name.Length == 0)
+            if (skills.Imagines[pair].Name.Length == 0 && recount.TryGetValue(pair, out var name))
                 skills.Imagines[pair] = skills.Imagines[pair] with { Name = name };
         }
 
-        // damage can come under the id of a skill level row: it takes the game's name of the skill it belongs to
         // the steps of a basic attack combo are all called "일반 공격" in the game table: "<name of the first skill>-<step>"
         foreach (var pair in gameNames)
         {
@@ -101,9 +100,10 @@ public sealed partial class GameCapture
                 skills.Names[pair.Key] = $"{first}-{step}";
         }
 
-        // (not for a basic attack: its bullets, like the dragon cannon shot, are other damage than the plain basic attack)
-        foreach (var pair in ReadSkillLevelOwners(SkillLevelTable))
-            if (gameNames.TryGetValue(pair.Value, out var owner) && owner != BasicAttackName) skills.Names[pair.Key] = owner;
+        // a skill level row id without a name of its own stays unnamed (shown as "미확인 <id>"): the name of the skill it belongs to is
+        // only kept as a hint for the list of unknown skills (unknown-skills.json), to be labeled by hand later
+        _levelOwners = ReadSkillLevelOwners(SkillLevelTable);
+        _ownerHints = gameNames;
 
         if (skills.Names.Count > 0) _skillNames = skills.Names;
         if (skills.Imagines.Count > 0) _imagines = skills.Imagines;
@@ -194,42 +194,80 @@ public sealed partial class GameCapture
     internal static string LocalizeScene(IReadOnlyDictionary<int, string> korean, int sceneId, string english) =>
         korean.TryGetValue(sceneId, out var name) ? name : english;
 
-    static Dictionary<int, string> ReadKoreanSkills()
+    const string RecountOther = "기타"; // the game's catch-all bucket of its damage list: no name of a skill
+
+    /// <summary>
+    /// The names the game's own damage list (RecountTable) gives: its rows name a list of damage ids (DamageAttrTable ids), and each of those
+    /// belongs to the skill id we receive in the damage packets (its TypeEnum). When several rows name one skill id the lowest damage id wins.
+    /// </summary>
+    internal static Dictionary<int, string> ReadRecountNames(string recountPath, string damageAttrPath)
     {
-        var map = new Dictionary<int, string>();
+        var names = new Dictionary<int, string>();
         try
         {
-            var path = Path.Combine(AppContext.BaseDirectory, "SkillNames.ko.json");
-            using var stream = File.Exists(path)
-                ? File.OpenRead(path)
-                : typeof(GameCapture).Assembly.GetManifestResourceStream("StarOverlay.Game.Data.SkillNames.ko.json");
-            if (stream == null) return map;
-            using var document = JsonDocument.Parse(stream);
-            foreach (var entry in document.RootElement.EnumerateObject())
+            if (!File.Exists(recountPath) || !File.Exists(damageAttrPath)) return names;
+            var byDamage = new Dictionary<long, string>();
+            using (var stream = File.OpenRead(recountPath))
+            using (var document = JsonDocument.Parse(stream))
             {
-                if (!int.TryParse(entry.Name, out var id)) continue;
-                var name = entry.Value.GetString() ?? "";
-                if (name.Length > 0) map[id] = name;
+                foreach (var entry in document.RootElement.EnumerateObject())
+                {
+                    var row = entry.Value;
+                    var name = row.TryGetProperty("RecountName", out var nameElement) && nameElement.ValueKind == JsonValueKind.String ? nameElement.GetString() ?? "" : "";
+                    if (name.Length == 0 || name == RecountOther) continue;
+                    if (!row.TryGetProperty("DamageId", out var ids) || ids.ValueKind != JsonValueKind.Array) continue;
+                    foreach (var id in ids.EnumerateArray())
+                        if (id.TryGetInt64(out var damageId)) byDamage.TryAdd(damageId, name);
+                }
             }
+
+            var damages = new List<(long Id, int Skill)>();
+            using (var stream = File.OpenRead(damageAttrPath))
+            using (var document = JsonDocument.Parse(stream))
+            {
+                foreach (var entry in document.RootElement.EnumerateObject())
+                {
+                    var row = entry.Value;
+                    if (row.TryGetProperty("Id", out var idElement) && idElement.TryGetInt64(out var id)
+                        && row.TryGetProperty("TypeEnum", out var typeElement) && typeElement.TryGetInt32(out var skill) && skill > 0)
+                        damages.Add((id, skill));
+                }
+            }
+
+            damages.Sort((left, right) => left.Id.CompareTo(right.Id));
+            foreach (var (id, skill) in damages)
+                if (byDamage.TryGetValue(id, out var name)) names.TryAdd(skill, name);
         }
         catch (Exception)
         {
         }
 
-        return map;
+        return names;
     }
 
+    /// <summary>
+    /// A buff the game gives no name (most of them are internal buffs the game never shows) is named from the developers' own name in the table
+    /// (Chinese) together with our machine translation of it: "질풍 강습 · 青岚强袭". With the Chinese next to it the name reads as "still to be checked";
+    /// a name that is only Korean is the game's. Without a translation only the Chinese name is shown. The game's own name always wins.
+    /// </summary>
     static void ApplyKoreanBuffs(Dictionary<int, BuffMeta> buffs)
     {
-        foreach (var pair in ReadKoreanBuffs())
+        var translations = ReadKoreanBuffs();
+        foreach (var id in buffs.Keys.ToArray())
         {
-            if (!buffs.TryGetValue(pair.Key, out var meta)) continue;
-            buffs[pair.Key] = meta with
-            {
-                Name = meta.Name.Length > 0 ? meta.Name : pair.Value.Name,
-                Description = meta.Description.Length > 0 ? meta.Description : pair.Value.Desc,
-            };
+            var meta = buffs[id];
+            translations.TryGetValue(id, out var translation);
+            var name = meta.Name.Length > 0 ? meta.Name : CombineBuffName(translation.Name, meta.Design);
+            var description = meta.Description.Length > 0 ? meta.Description : translation.Desc ?? "";
+            if (name != meta.Name || description != meta.Description) buffs[id] = meta with { Name = name, Description = description };
         }
+    }
+
+    internal static string CombineBuffName(string? translated, string design)
+    {
+        translated ??= "";
+        if (translated.Length > 0 && design.Length > 0 && translated != design) return translated + " · " + design;
+        return translated.Length > 0 ? translated : design;
     }
 
     static Dictionary<int, (string Name, string Desc)> ReadKoreanBuffs()
@@ -349,6 +387,7 @@ public sealed partial class GameCapture
                     continue;
                 var name = entry.Value.TryGetProperty("Name", out var nameElement) ? nameElement.GetString() ?? "" : "";
                 var description = entry.Value.TryGetProperty("Desc", out var descElement) ? descElement.GetString() ?? "" : "";
+                var design = entry.Value.TryGetProperty("NameDesign", out var designElement) && designElement.ValueKind == JsonValueKind.String ? designElement.GetString() ?? "" : "";
                 var skill = entry.Value.TryGetProperty("SkillId", out var skillElement) && skillElement.TryGetInt32(out var skillId) ? skillId : 0;
                 var ability = entry.Value.TryGetProperty("BuffAbilityType", out var abilityElement) && abilityElement.TryGetInt32(out var abilityType) ? abilityType : 0;
                 if (ability == 101) cuisine.Add(id);
@@ -365,7 +404,7 @@ public sealed partial class GameCapture
                     }
                 }
 
-                map[id] = new BuffMeta(name, skill, duration, description);
+                map[id] = new BuffMeta(name, skill, duration, description, design);
             }
         }
         catch (Exception)

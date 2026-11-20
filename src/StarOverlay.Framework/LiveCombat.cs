@@ -40,7 +40,6 @@ public static class LiveCombat
     static long _scheduledEndTicks;
     static int _combatEpoch;
     static int _combatArm;
-    static int _preserveClock;
     static long _startedTicks = DateTime.UtcNow.Ticks;
 
     public static int Generation => Volatile.Read(ref _generation);
@@ -52,8 +51,6 @@ public static class LiveCombat
     public static string Location => _location;
 
     public static bool Recordable => Volatile.Read(ref _recordable) != 0;
-
-    public static bool PreserveClock => Volatile.Read(ref _preserveClock) != 0;
 
     public static int SceneChanges => Volatile.Read(ref _sceneChanges);
 
@@ -91,8 +88,6 @@ public static class LiveCombat
         _location = location ?? "";
         Volatile.Write(ref _recordable, recordable ? 1 : 0);
     }
-
-    public static void SetPreserveClock(bool preserve) => Volatile.Write(ref _preserveClock, preserve ? 1 : 0);
 
     public static void SetStarted(DateTime started) =>
         Volatile.Write(ref _startedTicks, started.ToUniversalTime().Ticks);
@@ -142,7 +137,6 @@ public static class LiveCombat
         _scheduledEndTicks = 0;
         _combatEpoch = 0;
         _combatArm = 0;
-        _preserveClock = 0;
         Volatile.Write(ref _startedTicks, DateTime.UtcNow.Ticks);
     }
 }
