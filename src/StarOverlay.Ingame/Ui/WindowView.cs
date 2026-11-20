@@ -36,7 +36,6 @@ internal sealed class WindowView
     IconStrip _strip;
     TextMeshProUGUI _footPlace;
     TextMeshProUGUI _footTime;
-    TextMeshProUGUI _empty;
     WindowDto _dto;
     LayoutDto _live; // the layout while the user drags (not yet confirmed by the service)
     string _buttonSignature = "";
@@ -470,7 +469,6 @@ internal sealed class WindowView
             _footTime.gameObject.SetActive(false);
         }
 
-        if (_empty != null) _empty.gameObject.SetActive(false);
     }
 
     RowView Row(int index)

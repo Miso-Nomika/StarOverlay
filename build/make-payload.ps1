@@ -4,7 +4,7 @@
 #   ingame\   BepInEx loader + our in-game agent + font + icons + Unity libraries
 #   plugins\  the standard plugins (dps.meter, chat, party.join, buff.tracker)
 # Needs: the game's interop assemblies in artifacts\ingame-refs (build\collect-interop.ps1 on a PC with the game, once).
-param([string]$Version = '0.4.0')
+param([string]$Version = '0.4.1')
 $ErrorActionPreference = 'Stop'
 $userDotnet = Join-Path $env:USERPROFILE '.dotnet'
 if (Test-Path (Join-Path $userDotnet 'dotnet.exe')) { $env:PATH = "$userDotnet;$env:PATH"; $env:DOTNET_ROOT = $userDotnet } # a per-user SDK wins over a runtime-only install
@@ -53,7 +53,7 @@ foreach ($plugin in $plugins) {
 
 # the settings a new user starts with (copied at install only where the user has no file yet)
 New-Item -ItemType Directory -Force (Join-Path $payload 'config-defaults') | Out-Null
-Copy-Item (Join-Path $root 'builddefaultsconfig*.json') (Join-Path $payload 'config-defaults')
+Copy-Item (Join-Path $root 'build\defaults\config\*.json') (Join-Path $payload 'config-defaults')
 
 # one id per build: the version and a short hash of what changes (the agent and the service)
 $agent = (Get-FileHash (Join-Path $payload 'ingame\agent\StarOverlay.Ingame.dll') -Algorithm SHA256).Hash.Substring(0, 6)

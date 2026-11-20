@@ -508,7 +508,11 @@ internal sealed class ChatPanel
     {
         var index = TMP_TextUtilities.FindIntersectingLink(bubble.Body, new Vector3(screenPoint.x, screenPoint.y, 0f), null);
         if (index < 0 || index >= bubble.Links.Count) return;
-        GameItemTips.Show(bubble.Links[index].ItemId, screenPoint);
+        // the game's own link in its chat bubble is clicked when that bubble is still in the game's list (the card then carries the item's own
+        // data); otherwise the card is asked for by the item id
+        var link = bubble.Links[index];
+        if (GameChatUi.ClickItemLink(bubble.Who, link.Token.Length > 0 ? link.Token : link.Name)) return;
+        GameItemTips.Show(link.ItemId, screenPoint);
     }
 
     Bubble Take(int index)

@@ -19,7 +19,7 @@ internal sealed partial class SettingsView
     int _eScroll;
     int _cScroll;
     string _pickKey = "";   // the row whose picture is being picked (empty: the list is shown)
-    string _pickTab = "Buffs";
+    string _pickTab = "Modules";
     int _pickScroll;
     static readonly System.Collections.Generic.Dictionary<string, string[]> PictureFiles = new();
 
@@ -160,7 +160,7 @@ internal sealed partial class SettingsView
     void BuildPicker(WidgetDto editor, double bw, double bh)
     {
         var row = editor.EditRows.FirstOrDefault(r => r.Key == _pickKey);
-        Text(_body.transform, "이미지 선택" + (row == null ? "" : " - " + Esc(row.Name)), 0, 0, bw - 330, 26, 14, new Color(1f, 0.85f, 0.54f, 1f));
+        Text(_body.transform, "이미지 선택" + (row == null ? "" : " - " + Esc(row.Name)), 0, 0, bw - 390, 26, 14, new Color(1f, 0.85f, 0.54f, 1f));
         var x = bw - 4;
         void Tab(string caption, string tab, double width)
         {
@@ -174,7 +174,8 @@ internal sealed partial class SettingsView
         x -= 49;
         Tab("내 그림", "custom", 62);
         Tab("스킬", "Skills", 46);
-        Tab("버프", "Buffs", 46);
+        Tab("이매진", "Imagines", 56);
+        Tab("모듈", "Modules", 46);
         Btn(_body.transform, "그림 없음(글자)", x - 130, 0, 130, 26, Button, () =>
         {
             Edit(editor, _pickKey, "set:image=none");
@@ -220,8 +221,6 @@ internal sealed partial class SettingsView
             picture.sprite = UiKit.LoadSprite(path);
             picture.preserveAspect = true;
             UiKit.Stretch(picture.gameObject, 3, 3, 3, 3);
-            var name = file;
-            UiKit.Hover(holder, () => _root.ShowTip(holder, name), () => _root.HideTip(holder));
         }
 
         if (totalRows > visibleRows)

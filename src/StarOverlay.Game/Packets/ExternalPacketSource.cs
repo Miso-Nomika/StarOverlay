@@ -8,13 +8,9 @@ namespace StarOverlay.Game.Packets;
 public abstract class ExternalPacketSource : IPacketSource
 {
     NetCap? _cap;
-    PacketRecorder? _recorder;
 
     public abstract string Name { get; }
     public abstract string Label { get; }
-
-    /// <summary>Raised for every packet before it is handed to the capture engine (used by the recorder).</summary>
-    public event Action<ReadOnlyMemory<byte>, bool, DateTime>? PacketReceived;
 
     public void Start(NetCap cap)
     {
@@ -22,14 +18,11 @@ public abstract class ExternalPacketSource : IPacketSource
         cap.Init(new NetCapConfig { ExeNames = GameProcesses.Names, TrustSource = true });
         cap.StartExternal();
         _cap = cap;
-        _recorder = PacketRecorder.TryStart(this);
         BeginPump();
     }
 
     public virtual void Stop()
     {
-        _recorder?.Dispose();
-        _recorder = null;
     }
 
     /// <summary>Acquire the resource (wait for the pipe client, open the file). Throws on failure.</summary>
@@ -40,8 +33,6 @@ public abstract class ExternalPacketSource : IPacketSource
 
     protected void Feed(ReadOnlySpan<byte> ip, bool outbound, DateTime utcTime)
     {
-        var handler = PacketReceived;
-        if (handler != null) handler(ip.ToArray(), outbound, utcTime);
         _cap?.ProcessIpPacket(ip, outbound, utcTime);
     }
 

@@ -290,6 +290,15 @@ internal static class UiKit
         var off = new EventTrigger.Entry { eventID = EventTriggerType.PointerExit };
         off.callback.AddListener((UnityAction<BaseEventData>)(_ => Guard(exit)));
         trigger.triggers.Add(off);
+        // an EventTrigger takes the wheel for itself even without a wheel entry: a list under the cursor would stop scrolling while a note is
+        // shown, so the wheel is handed on to the parent (the list's scroll region)
+        var wheel = new EventTrigger.Entry { eventID = EventTriggerType.Scroll };
+        wheel.callback.AddListener((UnityAction<BaseEventData>)(data => Guard(() =>
+        {
+            var parent = go.transform.parent;
+            if (parent != null) ExecuteEvents.ExecuteHierarchy(parent.gameObject, data, ExecuteEvents.scrollHandler);
+        })));
+        trigger.triggers.Add(wheel);
     }
 
     static void Guard(Action action)

@@ -160,14 +160,15 @@ public sealed class UiSnapshotBuilder(IIngameHooks hooks, LayoutStore layouts)
             foreach (var setting in host.Settings.Where(s => s.PluginId == id && s.Key != ToolDeleteKey))
                 window.Settings.Add(ToSetting(setting));
 
-            // a window that only shows icons (the editor widget lives in its settings window) is drawn bare
-            window.Bare = window.Widgets.Any(w => w.Kind == WidgetKind.Icons) && window.Widgets.All(w => w.Kind is WidgetKind.Icons or WidgetKind.Editor);
             window.HasRecords = host.EncounterLogs.Any(log => log.PluginId == id);
             window.SettingsLayout = layouts.Get(id + SettingsSuffix, window.HasRecords
                 ? new LayoutDto { X = 0.17, Y = 0.07, W = 0.66, H = 0.85 } // fight records need room for the table, graph, skills and buffs
                 : new LayoutDto { X = 0.3, Y = 0.12, W = 0.4, H = 0.72 });
 
             window.Layout = layouts.Get(id, windows.Count, DefaultWidth(window), DefaultHeight(window));
+            // a window that only shows icons (the editor widget lives in its settings window) is drawn bare, with only a small handle, once its
+            // top tab is hidden; while it is on, it keeps its top tab so it can be found when no icon is there
+            window.Bare = window.Layout.HeaderHidden && window.Widgets.Any(w => w.Kind == WidgetKind.Icons) && window.Widgets.All(w => w.Kind is WidgetKind.Icons or WidgetKind.Editor);
             windows.Add(window);
         }
 

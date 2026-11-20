@@ -1,6 +1,6 @@
 namespace StarOverlay.Game.Packets;
 
-/// <summary>Feeds recorded frames (PacketRecorder output, or the older T36 dump) as fast as possible. Used by tests.</summary>
+/// <summary>Feeds recorded frames (written with PacketFrames, or the older T36 dump) as fast as possible. Used by tests.</summary>
 public sealed class ReplayPacketSource : ExternalPacketSource
 {
     readonly string _path;

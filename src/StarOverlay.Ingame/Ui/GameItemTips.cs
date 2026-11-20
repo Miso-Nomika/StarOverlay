@@ -29,7 +29,6 @@ static class GameItemTips
                         + "Z.TipsVM.OpenItemTipsView({ configId = " + itemId + ", itemUuid = 0, showType = E.EItemTipsShowType.Default, "
                         + "posType = E.EItemTipsPopType.ScreenPosition, screenPosition = Vector2(" + x + ", " + y + "), isShowBg = true, isResident = false })";
             _doString.Invoke(_state, new object[] { chunk, "StarOverlay.ItemTips" });
-            if (_logged++ < 3) Plugin.L.LogInfo("game item card opened for " + itemId);
             return true;
         }
         catch (Exception e)

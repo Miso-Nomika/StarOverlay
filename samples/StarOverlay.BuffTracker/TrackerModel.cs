@@ -13,7 +13,7 @@ public sealed class TrackedBuff
 
     [JsonPropertyName("stacks")] public bool Stacks { get; set; } = true;
 
-    /// <summary>"none" (no picture: the first letter of the name), "lib:Buffs/&lt;name&gt;.png" or "lib:Skills/&lt;name&gt;.png" (the bundled library) or "file:&lt;name&gt;.png" (a picture in assets\custom).</summary>
+    /// <summary>"none" (no picture: the first letter of the name), "lib:Modules/&lt;name&gt;.png", "lib:Skills/&lt;name&gt;.png" or "lib:Imagines/&lt;name&gt;.png" (the bundled library) or "file:&lt;name&gt;.png" (a picture in assets\custom).</summary>
     [JsonPropertyName("image")] public string Image { get; set; } = "none";
 
     /// <summary>"none", "ring" (empties with the time) or "ring-reverse" (fills with the time).</summary>
@@ -139,9 +139,9 @@ public sealed class TrackerModel(Func<string?> read, Action<string> write, strin
         return choices[(at + 1) % choices.Length];
     }
 
-    static readonly string[] LibraryFolders = ["Buffs", "Skills"];
+    static readonly string[] LibraryFolders = ["Modules", "Skills", "Imagines"];
 
-    /// <summary>The folder with the bundled pictures (assets\library\Buffs and \Skills), next to the folder of the user's own pictures.</summary>
+    /// <summary>The folder with the bundled pictures (assets\library\Modules, \Skills and \Imagines), next to the folder of the user's own pictures.</summary>
     string LibraryDirectory => Path.Combine(Path.GetDirectoryName(customDirectory.TrimEnd(Path.DirectorySeparatorChar)) ?? ".", "library");
 
     /// <summary>Takes "image=&lt;ref&gt;" when the reference is "none", a bundled picture or a picture file name: nothing else is ever turned into a path.</summary>

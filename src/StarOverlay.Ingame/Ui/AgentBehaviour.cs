@@ -18,8 +18,6 @@ public class AgentBehaviour : MonoBehaviour
     UiRoot _ui;
     List<WindowDto> _pending;
     int _errors;
-    int _applied;
-    float _nextHeartbeat;
     float _nextHud;
 
     void Update()
@@ -63,10 +61,6 @@ public class AgentBehaviour : MonoBehaviour
                 _ui.Apply(windows);
             }
 
-            if (Time.realtimeSinceStartup > _nextHeartbeat)
-            {
-                _nextHeartbeat = Time.realtimeSinceStartup + 60f;
-            }
         }
         catch (Exception e)
         {
