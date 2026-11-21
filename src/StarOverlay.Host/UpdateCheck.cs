@@ -9,7 +9,7 @@ namespace StarOverlay.Host;
 /// <summary>Asks once, when the game starts, whether a newer release exists (the "latest" page redirects to the newest tag).</summary>
 internal static class UpdateCheck
 {
-    internal const string LatestPage = "https://github.com/Miso-Nomika/StarOverlay/releases/latest";
+    internal const string LatestPage = LiveUpdate.ReleasePage;
 
     public static void Start() => _ = Task.Run(async () =>
     {

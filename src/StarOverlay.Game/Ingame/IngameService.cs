@@ -396,9 +396,6 @@ public sealed class IngameService : IDisposable
             case CommandAction.Copy:
                 if (cmd.Value.Length > 0) _hooks.CopyText(cmd.Value.Length > 4000 ? cmd.Value[..4000] : cmd.Value);
                 break;
-            case CommandAction.Release:
-                if (LiveUpdate.Available) _hooks.OpenReleasePage();
-                break;
             case CommandAction.Prompt:
                 _hooks.OpenPrompt();
                 break;

@@ -8,15 +8,26 @@ namespace StarOverlay.Framework;
 /// </summary>
 public static class LiveUpdate
 {
+    /// <summary>The page of the newest release (the in-game notice opens it).</summary>
+    public const string ReleasePage = "https://github.com/Miso-Nomika/StarOverlay/releases/latest";
+
     private static readonly TimeSpan Throttle = TimeSpan.FromHours(1);
     private static string _latest = "";
+    private static string _current = "";
 
     /// <summary>The newer version (like "0.4.5"), or empty when there is none or it is unknown.</summary>
     public static string Latest => Volatile.Read(ref _latest);
 
+    /// <summary>The version that is running (like "0.4.4"), known once the check has started.</summary>
+    public static string Current => Volatile.Read(ref _current);
+
     public static bool Available => Latest.Length > 0;
 
-    public static void Reset() => Volatile.Write(ref _latest, "");
+    public static void Reset()
+    {
+        Volatile.Write(ref _latest, "");
+        Volatile.Write(ref _current, "");
+    }
 
     /// <summary>Reads "v0.4.5" / "0.4.5" into a version; null when it is not one.</summary>
     public static Version? Parse(string? text)
@@ -40,6 +51,7 @@ public static class LiveUpdate
     /// </summary>
     public static async Task<bool> CheckAsync(Func<Task<string?>> fetch, string stateFile, Version current, DateTime nowUtc)
     {
+        Volatile.Write(ref _current, current.ToString(3));
         var state = Load(stateFile);
         if (IsNewer(state.Latest, current))
         {

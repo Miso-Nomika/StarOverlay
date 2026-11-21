@@ -51,7 +51,6 @@ public static class CommandAction
     public const string Collapse = "collapse";  // value = true/false
     public const string Plugin = "plugin";      // window "root": key = plugin id, value = true/false
     public const string Settings = "settings";  // open the service's settings / record window for the window's plugin
-    public const string Release = "release";    // open the page of the newest release in the browser (the service knows the address, the agent sends none)
     public const string Prompt = "prompt";      // open the translation prompt window of the service
     public const string Set = "set";            // key, value: numbers (clamped to the setting range), choices, or the default value
     public const string Records = "records";    // ask for the window's fight record list

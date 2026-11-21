@@ -97,17 +97,6 @@ internal sealed class AgentContext : ApplicationContext, IIngameHooks
             _prompt.BringToTop();
         });
 
-    public void OpenReleasePage()
-    {
-        try
-        {
-            Process.Start(new ProcessStartInfo(UpdateCheck.LatestPage) { UseShellExecute = true }); // the address is ours, never one sent by the game window
-        }
-        catch (Exception)
-        {
-        }
-    }
-
     public void CopyText(string text) =>
         _owner.BeginInvoke(() =>
         {

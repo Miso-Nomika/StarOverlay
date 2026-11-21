@@ -43,7 +43,7 @@ $plugins = @(
 )
 foreach ($plugin in $plugins) {
     $out = Join-Path $art ('plugin-build\' + $plugin.Project)
-    Run { dotnet build (Join-Path $root "samples\$($plugin.Project)\$($plugin.Project).csproj") -c Release -p:DebugType=none -o $out }
+    Run { dotnet build (Join-Path $root "samples\$($plugin.Project)\$($plugin.Project).csproj") -c Release -p:DebugType=none -p:Version=$Version -o $out }
     $target = Join-Path $payload ('plugins\' + $plugin.Id)
     New-Item -ItemType Directory -Force $target | Out-Null
     Copy-Item (Join-Path $out ($plugin.Project + '.dll')) $target

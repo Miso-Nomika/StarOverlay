@@ -20,9 +20,6 @@ public interface IIngameHooks
 
     void OpenPrompt();
 
-    /// <summary>Opens the page of the newest release in the browser.</summary>
-    void OpenReleasePage();
-
     /// <summary>Puts text on the Windows clipboard (a chat message the user chose to copy).</summary>
     void CopyText(string text);
 
@@ -197,14 +194,16 @@ public sealed class UiSnapshotBuilder(IIngameHooks hooks, LayoutStore layouts)
         _ => pluginId,
     };
 
+    const double RootDefaultWidth = 0.1790625, RootDefaultHeight = 0.161;
+
     WindowDto Root(int index)
     {
         var window = new WindowDto { Id = RootWindowId, Title = "시스템" };
         foreach (var plugin in hooks.Plugins().OrderBy(p => p.Id, StringComparer.OrdinalIgnoreCase))
             window.Settings.Add(new SettingDto { Key = plugin.Id, Label = DisplayName(plugin.Id), Kind = "plugin", Value = !plugin.Enabled ? "off" : layouts.Get(plugin.Id, new LayoutDto()).HeaderHidden ? "hidden" : "on" });
         if (LiveUpdate.Available)
-            window.Settings.Add(new SettingDto { Key = "update", Label = "새 버전이 있습니다 (v" + LiveUpdate.Latest + ")", Kind = "notice" });
-        window.Layout = layouts.Get(RootWindowId, index, 0.2, 0.04 + 0.032 * Math.Max(1, window.Settings.Count));
+            window.Settings.Add(new SettingDto { Key = "update", Label = LiveUpdate.Current.Length > 0 ? "새 버전이 있습니다 (v" + LiveUpdate.Current + " → v" + LiveUpdate.Latest + ")" : "새 버전이 있습니다 (v" + LiveUpdate.Latest + ")", Kind = "notice", Value = LiveUpdate.ReleasePage });
+        window.Layout = layouts.Get(RootWindowId, index, RootDefaultWidth, RootDefaultHeight); // the size a new player starts with (not stored until the window is moved or resized)
         return window;
     }
 

@@ -98,6 +98,25 @@ internal sealed class WindowView
     }
 
     /// <summary>The wheel moved the meter rows (also called from the row icons: an object with its own event handler would otherwise swallow the wheel).</summary>
+    /// <summary>Opens a page of our own repository in the browser. The game is the window in front when the button is pressed, so the browser comes up in front of it.</summary>
+    static void OpenPage(string address)
+    {
+        if (address == null || !address.StartsWith("https://github.com/Miso-Nomika/", StringComparison.Ordinal)) return;
+        try
+        {
+            AllowSetForegroundWindow(-1); // any program may now come to the front: Windows otherwise keeps a browser that is already running behind the game
+        }
+        catch (Exception e)
+        {
+            Plugin.L.LogWarning("foreground: " + e.Message);
+        }
+
+        Application.OpenURL(address);
+    }
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    static extern bool AllowSetForegroundWindow(int processId);
+
     void Scrolled(int steps)
     {
         if (_dto == null || _dto.Layout.Collapsed) return;
@@ -378,24 +397,34 @@ internal sealed class WindowView
 
         if (dto.Id == UiRoot.RootId)
         {
-            // the system window lists the plugins as toggles
-            foreach (var plugin in dto.Settings)
+            // the system window lists the plugins as toggles; when the window is too small for all of them the wheel and a drag scroll the list,
+            // and the "new version" line stays at the bottom
+            const double step = 26, noticeHeight = 30;
+            var plugins = dto.Settings.FindAll(item => item.Kind != "notice");
+            var notice = dto.Settings.Find(item => item.Kind == "notice");
+            _rowStep = step;
+            var listHeight = bodyHeight - (notice != null ? noticeHeight : 0);
+            var visible = Math.Max(1, (int)Math.Floor((listHeight + 2) / step));
+            _maxScroll = Math.Max(0, plugins.Count - visible);
+            _scroll = Math.Clamp(_scroll, 0, _maxScroll);
+            for (var i = _scroll; i < plugins.Count; i++)
             {
-                if (plugin.Kind == "notice")
-                {
-                    // a standing line at the bottom: a newer release exists
-                    // pressing it opens the release page in the browser
-                    var note = Row(rowIndex++);
-                    note.Place(0, y + 4, bodyWidth, 24);
-                    note.ShowLink("<color=#f2c94c>" + plugin.Label + "</color>  <color=#9ea9bb>(눌러서 열기)</color>", () => _root.Send(new CommandDto { Window = UiRoot.RootId, Action = CommandAction.Release }));
-                    y += 30;
-                    continue;
-                }
-
+                var plugin = plugins[i];
+                if (y + 24 > listHeight + 2) break;
                 var row = Row(rowIndex++);
                 row.Place(0, y, bodyWidth, 24);
                 row.ShowChoice(plugin.Label, plugin.Value, state => _root.Send(new CommandDto { Window = UiRoot.RootId, Action = CommandAction.Plugin, Key = plugin.Key, Value = state }));
-                y += 26;
+                y += step;
+            }
+
+            if (notice != null)
+            {
+                // pressing it opens the release page in the browser
+                var note = Row(rowIndex++);
+                note.Place(0, Math.Max(y, bodyHeight - noticeHeight) + 4, bodyWidth, 24);
+                var page = notice.Value;
+                note.ShowLink("<color=#f2c94c>" + notice.Label + "</color>  <color=#9ea9bb>(눌러서 열기)</color>", () => OpenPage(page));
+                y += noticeHeight;
             }
         }
 
