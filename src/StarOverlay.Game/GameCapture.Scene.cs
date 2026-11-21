@@ -451,7 +451,7 @@ public sealed partial class GameCapture
             var raid = _raidScenes.Contains(_sceneId);
             var extremeHard = _extremeHardScenes.Contains(_sceneId);
             var guildHunt = _guildHuntScenes.Contains(_sceneId);
-            recordable = IsRecordable(guildCenter, vault, master, _masterDifficulty, raid, extremeHard, guildHunt, LiveCombat.RecordExtra);
+            recordable = IsRecordable(guildCenter, vault, master, _masterDifficulty, raid, extremeHard, guildHunt, LiveCombat.RecordExtra, VaultFloor(name), LiveCombat.VaultFifthOnly);
             encounters = IsRecordable(guildCenter, vault, master, _masterDifficulty, raid, extremeHard, guildHunt, recordMore: true); // the places that can be recorded all have encounters
             title = LocationTitle(name);
         }
@@ -469,11 +469,20 @@ public sealed partial class GameCapture
     /// With the "record more" choice also master 1 and 6, the hard extreme space and the guild hunts. A master dungeon whose difficulty is
     /// not known yet counts as recorded (nothing is lost if the packet that says it is missed).
     /// </summary>
-    internal static bool IsRecordable(bool guildCenter, bool vault, bool master, int masterDifficulty, bool raid, bool extremeHard, bool guildHunt, bool recordMore)
+    internal static bool IsRecordable(bool guildCenter, bool vault, bool master, int masterDifficulty, bool raid, bool extremeHard, bool guildHunt, bool recordMore, int vaultFloor = 0, bool vaultFifthOnly = false)
     {
-        if (guildCenter || vault || raid) return true;
+        // the vault is recorded on every floor, or (by choice) only on 5, 10, 15...; a floor that is not known counts as recorded
+        if (vault) return !vaultFifthOnly || vaultFloor <= 0 || vaultFloor % 5 == 0;
+        if (guildCenter || raid) return true;
         if (master) return recordMore || masterDifficulty is not (MasterEasiest or MasterHardest);
         return recordMore && (extremeHard || guildHunt);
+    }
+
+    /// <summary>The floor number in a vault place name ("시디문 유적 5층" → 5); 0 when the name has none.</summary>
+    internal static int VaultFloor(string name)
+    {
+        var match = System.Text.RegularExpressions.Regex.Match(name ?? "", @"(\d+)\s*층");
+        return match.Success && int.TryParse(match.Groups[1].Value, out var floor) ? floor : 0;
     }
 
     string SceneName()

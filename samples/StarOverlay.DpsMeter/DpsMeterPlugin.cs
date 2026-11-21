@@ -21,8 +21,10 @@ public sealed class DpsMeterPlugin : IPlugin
         context.Controls.AddToggle("show-imagines", "이매진 표시", true);
         context.Controls.AddToggle("show-power", "전투력 표시", true);
         context.Controls.AddToggle("show-season", "시즌 강도 표시", true);
-        LiveCombat.SetRecordExtra(context.Settings.Get("record-extra") == "true"); // off until the player asks for it
-        context.Controls.AddToggle("record-extra", "극한공간 하드, 마스터 1, 마스터 6, 길드 사냥 기록 추가", false, LiveCombat.SetRecordExtra);
+        LiveCombat.SetRecordExtra(context.Settings.Get("record-extra") != "false"); // on until the player switches it off
+        context.Controls.AddToggle("record-extra", "극한공간 하드, 마스터 1, 마스터 6, 길드 사냥 기록 추가", true, LiveCombat.SetRecordExtra);
+        LiveCombat.SetVaultFifthOnly(context.Settings.Get("record-vault-fifth") == "true"); // off until the player asks for it
+        context.Controls.AddToggle("record-vault-fifth", "시디문 5층 단위로만 기록", false, LiveCombat.SetVaultFifthOnly);
         context.Controls.AddText("row-height", "행 높이", "24", 18, 72);
         context.Controls.AddText("font-size", "글자 크기", "15", 8, 40);
         context.Ui.AddMeter("dps.meter.rows", () => _session.Rows(context), () => _session.RowHeight(context), () => _session.TextSize(context));

@@ -76,6 +76,13 @@ public static class LiveCombat
 
     public static void SetRecordExtra(bool on) => Volatile.Write(ref _recordExtra, on ? 1 : 0);
 
+    static int _vaultFifthOnly;
+
+    /// <summary>The player chose to record the Stimen Vault only on every fifth floor (5, 10, 15...); off: every floor is recorded.</summary>
+    public static bool VaultFifthOnly => Volatile.Read(ref _vaultFifthOnly) != 0;
+
+    public static void SetVaultFifthOnly(bool on) => Volatile.Write(ref _vaultFifthOnly, on ? 1 : 0);
+
     public static int Generation => Volatile.Read(ref _generation);
 
     public static string Note => _note;
@@ -185,6 +192,7 @@ public static class LiveCombat
         _combatEpoch = 0;
         _combatArm = 0;
         _recordExtra = 0;
+        _vaultFifthOnly = 0;
         _encounters = 0;
         _endKind = 0;
         Volatile.Write(ref _startedTicks, DateTime.UtcNow.Ticks);
