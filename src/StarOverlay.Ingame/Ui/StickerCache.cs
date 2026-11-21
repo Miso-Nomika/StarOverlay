@@ -75,18 +75,20 @@ static class StickerCache
                 if (byName.Success && Get(byName.Value) == null && Copy(byName.Value, image)) copiedAny = true; // the texture carries the sticker name
             }
 
-            // otherwise pair them by order: the newest picture bubble with the newest picture line of the same sender
-            var linesNewestFirst = new List<ChatLineDto>(wanted);
-            linesNewestFirst.Reverse();
-            var next = pictures.Count - 1;
-            foreach (var line in linesNewestFirst)
+            // otherwise pair them by order: the newest picture bubble with the newest picture line of the same sender. All picture lines take
+            // their turn, also the ones that already have their picture: their bubbles are still in the game's list and must not be given away
+            var allNewestFirst = new List<ChatLineDto>();
+            foreach (var line in lines)
+                if (NameOf(line.Text) != null) allNewestFirst.Add(line);
+            allNewestFirst.Reverse();
+            var paired = StickerPairing.Pair(
+                allNewestFirst.ConvertAll(line => Squash(line.Name)),
+                pictures.ConvertAll(picture => picture.Who));
+            for (var i = 0; i < allNewestFirst.Count; i++)
             {
-                var name = NameOf(line.Text);
-                if (Get(name) != null) continue;
-                while (next >= 0 && pictures[next].Who != Squash(line.Name)) next--;
-                if (next < 0) break;
-                if (Copy(name, pictures[next].Image)) copiedAny = true;
-                next--;
+                if (paired[i] < 0) continue;
+                var name = NameOf(allNewestFirst[i].Text);
+                if (Get(name) == null && Copy(name, pictures[paired[i]].Image)) copiedAny = true;
             }
 
             if (copiedAny) Version++;

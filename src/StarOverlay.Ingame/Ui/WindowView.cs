@@ -381,6 +381,17 @@ internal sealed class WindowView
             // the system window lists the plugins as toggles
             foreach (var plugin in dto.Settings)
             {
+                if (plugin.Kind == "notice")
+                {
+                    // a standing line at the bottom: a newer release exists
+                    // pressing it opens the release page in the browser
+                    var note = Row(rowIndex++);
+                    note.Place(0, y + 4, bodyWidth, 24);
+                    note.ShowLink("<color=#f2c94c>" + plugin.Label + "</color>  <color=#9ea9bb>(눌러서 열기)</color>", () => _root.Send(new CommandDto { Window = UiRoot.RootId, Action = CommandAction.Release }));
+                    y += 30;
+                    continue;
+                }
+
                 var row = Row(rowIndex++);
                 row.Place(0, y, bodyWidth, 24);
                 row.ShowChoice(plugin.Label, plugin.Value, state => _root.Send(new CommandDto { Window = UiRoot.RootId, Action = CommandAction.Plugin, Key = plugin.Key, Value = state }));
@@ -679,6 +690,15 @@ internal sealed class WindowView
             });
             _button.onClick.AddListener(_action);
             _button.interactable = true;
+        }
+
+        /// <summary>A line that is a link: text already formatted, no on/off look, pressing it runs <paramref name="click"/>.</summary>
+        public void ShowLink(string text, Action click)
+        {
+            ShowToggle("", true, click);
+            _fill.color = new Color(0.95f, 0.78f, 0.3f, 0.18f);
+            UiKit.Place(_left.gameObject, 6, 0, _w - 12, _h);
+            UiKit.SetText(_left, text);
         }
 
         public void Hide() => _root.SetActive(false);

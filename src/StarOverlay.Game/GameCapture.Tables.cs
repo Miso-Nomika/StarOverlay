@@ -32,6 +32,7 @@ public sealed partial class GameCapture
     static string DamageAttrTable => TablePath("DamageAttrTable.json");
     static string SceneTable => TablePath("SceneTable.json");
     static string DungeonTable => TablePath("DungeonsTable.json");
+    static string TargetTable => TablePath("TargetTable.json");
     static string MonsterTable => TablePath("MonsterTable.json");
     static string ItemTable => TablePath("ItemTable.json");
     static string EquipTable => TablePath("EquipTable.json");
@@ -120,7 +121,19 @@ public sealed partial class GameCapture
         foreach (var id in scenesKo.Keys.Where(scenes.ContainsKey).ToArray())
             scenesKo.Remove(id);
         _scenesKo = scenesKo;
+        var survey = ReadSurveyTargets(TargetTable);
+        if (survey.Count > 0) _surveyTargets = survey;
+        var killAll = ReadKillAllTargets(TargetTable);
+        if (killAll.Count > 0) _killAllTargets = killAll;
         if (dungeons.Master.Count > 0) _masterScenes = dungeons.Master;
+        var extra = ReadExtraDungeons(DungeonTable);
+        if (extra.ExtremeKinds.Count > 0)
+        {
+            _extremeKinds = extra.ExtremeKinds;
+            _extremeHardScenes = extra.ExtremeKinds.Where(pair => pair.Value == HardName).Select(pair => pair.Key).ToHashSet();
+        }
+
+        if (extra.GuildHunt.Count > 0) _guildHuntScenes = extra.GuildHunt;
         if (dungeons.Raid.Count > 0) _raidScenes = dungeons.Raid;
         if (dungeons.Vault.Count > 0) _vaultScenes = dungeons.Vault;
         var items = ReadItems(ItemTable);
@@ -128,6 +141,89 @@ public sealed partial class GameCapture
         var bosses = ReadBosses(MonsterTable);
         if (bosses.Count > 0) _bosses = bosses;
         AccessoryGear.UseTables(EquipTable, EquipAttrLibTable);
+    }
+
+    static Dictionary<int, string> _extremeKinds = [];
+    static HashSet<int> _extremeHardScenes = [];
+    static HashSet<int> _guildHuntScenes = [];
+    static HashSet<int> _surveyTargets = [];
+    static HashSet<int> _killAllTargets = [];
+
+    const int SurveyTargetType = 27;
+
+    /// <summary>
+    /// The dungeon goals that read "... 조사를 완료하고 보스전 시작하기" (target type 27): the one that ends a trash section. Other goals of a dungeon
+    /// (kill this monster, collect that, reach the end) are not section clears.
+    /// </summary>
+    internal static HashSet<int> ReadSurveyTargets(string path) =>
+        ReadTargets(path, (kind, words) => kind == SurveyTargetType && words.Contains("조사", StringComparison.Ordinal));
+
+    /// <summary>The goal "모든 적 처치하기" of a Stimen Vault floor: when it is done, the floor was cleared (when the vault ends without it, time ran out).</summary>
+    internal static HashSet<int> ReadKillAllTargets(string path) =>
+        ReadTargets(path, (_, words) => words.Contains("모든 적 처치", StringComparison.Ordinal));
+
+    static HashSet<int> ReadTargets(string path, Func<int, string, bool> wanted)
+    {
+        var ids = new HashSet<int>();
+        if (!File.Exists(path)) return ids;
+        try
+        {
+            using var stream = File.OpenRead(path);
+            using var document = JsonDocument.Parse(stream);
+            foreach (var entry in document.RootElement.EnumerateObject())
+            {
+                var row = entry.Value;
+                if (!row.TryGetProperty("TargetType", out var type) || !type.TryGetInt32(out var kind)) continue;
+                if (!row.TryGetProperty("TargetDes", out var text) || text.ValueKind != JsonValueKind.String || text.GetString() is not { } words || !wanted(kind, words)) continue;
+                if (row.TryGetProperty("Id", out var id) && id.TryGetInt32(out var number) && number > 0) ids.Add(number);
+            }
+        }
+        catch (Exception)
+        {
+        }
+
+        return ids;
+    }
+
+    const int ExtremeSpacePlayType = 9;
+    const int GuildHuntPlayType = 13;
+    const string HardName = "하드";
+
+    /// <summary>
+    /// The extreme space places with their level as the game table names it (play type 9, dungeon type "하드" or "노멀": the same scene name
+    /// serves both) and the guild hunts (play type 13). The hard extreme space and the guild hunts are only recorded when the player asks for it.
+    /// </summary>
+    internal static (Dictionary<int, string> ExtremeKinds, HashSet<int> GuildHunt) ReadExtraDungeons(string path)
+    {
+        var kinds = new Dictionary<int, string>();
+        var hunt = new HashSet<int>();
+        if (!File.Exists(path)) return (kinds, hunt);
+        try
+        {
+            using var stream = File.OpenRead(path);
+            using var document = JsonDocument.Parse(stream);
+            foreach (var entry in document.RootElement.EnumerateObject())
+            {
+                var row = entry.Value;
+                if (!row.TryGetProperty("PlayType", out var playElement) || !playElement.TryGetInt32(out var play)) continue;
+                var ids = new List<int>(2);
+                if (row.TryGetProperty("SceneID", out var scene) && scene.TryGetInt32(out var sceneId) && sceneId > 0) ids.Add(sceneId);
+                if (row.TryGetProperty("Id", out var id) && id.TryGetInt32(out var dungeonId) && dungeonId > 0) ids.Add(dungeonId);
+                if (play == GuildHuntPlayType)
+                {
+                    foreach (var number in ids) hunt.Add(number);
+                }
+                else if (play == ExtremeSpacePlayType && row.TryGetProperty("DungeonTypeName", out var kind) && kind.ValueKind == JsonValueKind.String && kind.GetString() is { Length: > 0 } level)
+                {
+                    foreach (var number in ids) kinds[number] = level;
+                }
+            }
+        }
+        catch (Exception)
+        {
+        }
+
+        return (kinds, hunt);
     }
 
     static (HashSet<int> Master, HashSet<int> Raid, HashSet<int> Vault) ReadDungeons(string path)

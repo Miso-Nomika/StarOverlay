@@ -90,7 +90,7 @@ public sealed partial class MeterSession
         foreach (var record in _finished)
         {
             if (!seen.Add(record.Id)) continue;
-            heads.Add(new EncounterHead(record.Id, record.Name, record.Started, false));
+            heads.Add(new EncounterHead(record.Id, record.Name, record.Started, false, record.EndReason));
         }
 
         return heads.OrderByDescending(head => head.Started).ToArray();
@@ -147,6 +147,7 @@ public sealed partial class MeterSession
             var state = new JsonReaderState(new JsonReaderOptions());
             var id = "";
             var name = "";
+            var endReason = "";
             var started = DateTime.MinValue;
             var current = false;
             var depth = 0;
@@ -180,6 +181,9 @@ public sealed partial class MeterSession
                         case JsonTokenType.String when depth == 1 && property == "name":
                             name = reader.GetString() ?? "";
                             break;
+                        case JsonTokenType.String when depth == 1 && property == "endReason":
+                            endReason = reader.GetString() ?? "";
+                            break;
                         case JsonTokenType.String when depth == 1 && property == "started":
                             if (reader.TryGetDateTime(out var when)) started = when;
                             break;
@@ -206,7 +210,7 @@ public sealed partial class MeterSession
 
             if (id.Length == 0) id = Path.GetFileNameWithoutExtension(info.Name);
             if (id.Length == 0) return null;
-            return new EncounterHead(id, name, started, current);
+            return new EncounterHead(id, name, started, current, endReason);
         }
         catch (Exception ex) when (ex is IOException or JsonException)
         {
@@ -241,7 +245,7 @@ public sealed partial class MeterSession
 
     private void RecordPlayers()
     {
-        if (_draft is null && !LiveCombat.Recordable) return;
+        if (_draft is null && !_placeRecordable) return;
         var second = Math.Max(0, (int)(DateTime.UtcNow - _started).TotalSeconds);
         var elapsed = Math.Max(1, (DateTime.UtcNow - _started).TotalSeconds);
         var wrote = false;
@@ -253,7 +257,7 @@ public sealed partial class MeterSession
             _draft ??= new FightDraft
             {
                 Id = DateTime.Now.ToString("yyyyMMdd-HHmmss-fff", CultureInfo.InvariantCulture),
-                Name = LiveCombat.Location,
+                Name = _placeName,
                 Started = DateTime.Now,
                 Current = true,
             };
@@ -437,10 +441,25 @@ public sealed partial class MeterSession
         return true;
     }
 
-    private void FinishDraft()
+    /// <summary>The words the record list shows for why a fight ended.</summary>
+    internal static string EndText(EncounterEndKind kind) => kind switch
+    {
+        EncounterEndKind.Manual => "직접 초기화",
+        EncounterEndKind.MapMove => "장소 이동",
+        EncounterEndKind.BossKill => "보스 처치",
+        EncounterEndKind.SectionClear => "구간 클리어",
+        EncounterEndKind.DungeonEnd => "던전 종료",
+        EncounterEndKind.Wipe => "전멸",
+        EncounterEndKind.VaultClear => "던전 클리어",
+        EncounterEndKind.VaultFail => "던전 실패",
+        _ => "전투 종료",
+    };
+
+    private void FinishDraft(EncounterEndKind kind)
     {
         if (_draft is null) return;
         _draft.Current = false;
+        _draft.EndReason = EndText(kind);
         _draft.Ended = DateTime.UtcNow;
         if (_draft.Players.Any(player => player.TotalDamage > 0 || player.Skills.Count > 0) && !SaveDraft())
             _finished.Add(ToView(_draft));
@@ -500,7 +519,8 @@ public sealed partial class MeterSession
             draft.Ended,
             draft.Current,
             views.Sum(player => player.TotalDamage),
-            views);
+            views,
+            draft.EndReason);
     }
 
     private static List<FightPlayer> LegacyPlayers(FightDraft draft)
@@ -532,6 +552,9 @@ public sealed partial class MeterSession
         public DateTime? Ended { get; set; }
 
         public bool Current { get; set; }
+
+        /// <summary>Why the fight ended (empty while it is going on); kept before the player list so the list can read it from the head of the file.</summary>
+        public string EndReason { get; set; } = "";
 
         public long TotalDamage { get; set; }
 

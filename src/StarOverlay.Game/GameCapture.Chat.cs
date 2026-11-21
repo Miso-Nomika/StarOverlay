@@ -37,7 +37,7 @@ public sealed partial class GameCapture
             if (message?.MsgInfo == null) return;
             var (text, links) = ChatItems.Compose(message.MsgInfo);
             var name = message.SendCharInfo?.Name ?? "";
-            LiveChat.Add(message.MsgId, LiveChat.ChannelName((int)request!.ChannelType), name, text, links: links);
+            LiveChat.Add(message.MsgId, LiveChat.ChannelName((int)request!.ChannelType), name, text, links: links, self: IsMine(message.SendCharInfo));
         }
         catch (Exception ex)
         {
@@ -121,7 +121,7 @@ public sealed partial class GameCapture
             foreach (var message in reply.MultiMsgList)
             {
                 if (message?.MsgInfo == null) continue;
-                if (LiveChat.Add(message.MsgId, channel, message.SendCharInfo?.Name ?? "", ChatItems.Compose(message.MsgInfo).Text, SaidAt(message.Timestamp), links: ChatItems.Compose(message.MsgInfo).Links)) added++;
+                if (LiveChat.Add(message.MsgId, channel, message.SendCharInfo?.Name ?? "", ChatItems.Compose(message.MsgInfo).Text, SaidAt(message.Timestamp), links: ChatItems.Compose(message.MsgInfo).Links, self: IsMine(message.SendCharInfo))) added++;
             }
 
         }
@@ -194,6 +194,13 @@ public sealed partial class GameCapture
         {
             return null;
         }
+    }
+
+    /// <summary>Whether a chat message was sent by the player themself (the character id is the player's entity id without its low 16 bits).</summary>
+    bool IsMine(BasicShowInfo? sender)
+    {
+        var selfId = Volatile.Read(ref _self) >> 16;
+        return sender != null && selfId != 0 && sender.CharID == selfId;
     }
 
 }

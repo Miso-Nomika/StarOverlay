@@ -62,9 +62,9 @@ $hostFiles = Get-ChildItem (Join-Path $payload 'host') -Filter 'StarOverlay.*.dl
 $hostFiles += Get-Item (Join-Path $payload 'host\StarOverlay.Host.dll')
 $host_ = ((($hostFiles | ForEach-Object { (Get-FileHash $_.FullName -Algorithm SHA256).Hash }) -join '') | ForEach-Object {
     $sha = [System.Security.Cryptography.SHA256]::Create(); ([BitConverter]::ToString($sha.ComputeHash([Text.Encoding]::ASCII.GetBytes($_))) -replace '-', '').Substring(0, 6) })
-# the plugins and their pictures count too: a build that changes only a picture must still be installed as a new one
+# the plugins and their pictures count too, by content (a same-length text change must still be installed as a new build)
 $pluginRoot = Join-Path $payload 'plugins'
-$plugins_ = ((Get-ChildItem $pluginRoot -Recurse -File | Sort-Object FullName | ForEach-Object { $_.FullName.Substring($pluginRoot.Length) + ':' + $_.Length }) -join '|') | ForEach-Object {
+$plugins_ = ((Get-ChildItem $pluginRoot -Recurse -File | Sort-Object FullName | ForEach-Object { $_.FullName.Substring($pluginRoot.Length) + ':' + (Get-FileHash $_.FullName -Algorithm SHA256).Hash }) -join '|') | ForEach-Object {
     $sha = [System.Security.Cryptography.SHA256]::Create(); ([BitConverter]::ToString($sha.ComputeHash([Text.Encoding]::UTF8.GetBytes($_))) -replace '-', '').Substring(0, 6) }
 "$Version-$agent$host_$plugins_" | Set-Content -Encoding ASCII (Join-Path $payload 'payload.id')
 

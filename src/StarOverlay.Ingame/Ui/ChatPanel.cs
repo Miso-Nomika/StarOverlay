@@ -278,7 +278,8 @@ internal sealed class ChatPanel
         _signature = signature;
 
         var listWidth = Math.Max(40, _w - RailWidth - 4);
-        var textWidth = Math.Max(20, listWidth - 12 - 16 - 4); // exactly the width the body text is laid in (Lay: listWidth - 12 - 16), minus a little so a measurement never ends up wider than the real text
+        // exactly the width the body text is laid in (Lay: listWidth - 12 - 16), minus one pixel: a bigger margin made a line that just fits count as wrapped, and the bubble got one empty line too many
+        var textWidth = Math.Max(20, listWidth - 12 - 16 - 1);
         var used = 0;
         double content = 4;
         var bar = false;
@@ -314,7 +315,7 @@ internal sealed class ChatPanel
                 for (var i = entries.Count - 1; i >= 0; i--)
                 {
                     var e = entries[i];
-                    Lay(Take(used++), e.Line.Name, e.Body, Color.white, y, listWidth, e.BodyHeight, NameLine(e.Line), IsSystem(e.Line) ? "" : e.Line.Text, e.Line.Links, IsSystem(e.Line) ? Brief : Color.white);
+                    Lay(Take(used++), e.Line.Name, e.Body, Color.white, y, listWidth, e.BodyHeight, NameLine(e.Line), IsSystem(e.Line) ? "" : e.Line.Text, e.Line.Links, IsSystem(e.Line) ? Brief : Color.white, e.Line.Self);
                     y += e.Box + _gap + 4;
                 }
             }
@@ -364,7 +365,7 @@ internal sealed class ChatPanel
                 {
                     var top = bottom - e.Box;
                     if (top < _h && bottom > 0)
-                        Lay(Take(used++), e.Line.Name, e.Body, Color.white, top, listWidth, e.BodyHeight, NameLine(e.Line), IsSystem(e.Line) ? "" : e.Line.Text, e.Line.Links, IsSystem(e.Line) ? Brief : Color.white);
+                        Lay(Take(used++), e.Line.Name, e.Body, Color.white, top, listWidth, e.BodyHeight, NameLine(e.Line), IsSystem(e.Line) ? "" : e.Line.Text, e.Line.Links, IsSystem(e.Line) ? Brief : Color.white, e.Line.Self);
                     bottom = top - _gap - 4;
                     if (bottom < -2) break;
                 }
@@ -410,6 +411,13 @@ internal sealed class ChatPanel
         if (IsSystem(line)) return ""; // loot and notices have no name line, no time and no copy button: just small grey text
         var tag = line.Channel.Length == 0 ? "" : $"<color=#{Hex(ChannelColor(line.Channel))}>[{Escape(line.Channel)}]</color> ";
         var time = line.Time.Length == 0 ? "" : $" <size={Math.Max(8, _size - 3)}><color=#8A909C>{line.Time}</color></size>"; // small and grey, after the name
+        if (line.Self) // the player's own lines sit on the right, so the header puts the time first: time, [channel], name
+        {
+            var own = line.Time.Length == 0 ? "" : $"<size={Math.Max(8, _size - 3)}><color=#8A909C>{line.Time}</color></size> ";
+            var channel = line.Channel.Length == 0 ? "" : $"<color=#{Hex(ChannelColor(line.Channel))}>[{Escape(line.Channel)}]</color> ";
+            return own + channel + $"<color=#{NameColor}>{Escape(line.Name)}</color>";
+        }
+
         return tag + $"<color=#{NameColor}>{Escape(line.Name)}</color>" + time;
     }
 
@@ -591,7 +599,7 @@ internal sealed class ChatPanel
         _copied = null;
     }
 
-    void Lay(Bubble bubble, string name, string body, Color color, double top, double listWidth, double bodyHeight, string nameText, string original, List<ChatLinkDto> links = null, Color? ink = null)
+    void Lay(Bubble bubble, string name, string body, Color color, double top, double listWidth, double bodyHeight, string nameText, string original, List<ChatLinkDto> links = null, Color? ink = null, bool mine = false)
     {
         bubble.Links = links ?? NoLinks;
         var nameHeight = string.IsNullOrEmpty(nameText) ? 0 : _size * 1.3;
@@ -603,14 +611,19 @@ internal sealed class ChatPanel
         UiKit.Place(bubble.Fill.gameObject, 6, top, width, boxHeight);
         bubble.Name.fontSize = _size;
         bubble.Name.gameObject.SetActive(nameHeight > 0);
+        // what the player said is shown on the right and has no copy button (they typed it themself)
+        var align = mine ? TextAlignmentOptions.TopRight : TextAlignmentOptions.TopLeft;
+        var copyRoom = mine ? 0 : 28;
+        bubble.Name.alignment = align;
+        bubble.Body.alignment = align;
         UiKit.SetText(bubble.Name, nameText);
-        UiKit.Place(bubble.Name.gameObject, 6 + 8, top + Pad, width - 16 - 28, nameHeight);
+        UiKit.Place(bubble.Name.gameObject, 6 + 8, top + Pad, width - 16 - copyRoom, nameHeight);
         bubble.Who = name ?? "";
         bubble.NameHit.SetActive(nameHeight > 0 && bubble.Who.Length > 0);
-        UiKit.Place(bubble.NameHit, 6 + 8, top + Pad, width - 16 - 28, nameHeight);
+        UiKit.Place(bubble.NameHit, 6 + 8, top + Pad, width - 16 - copyRoom, nameHeight);
         var stickerName = StickerCache.NameOf(original);
         var stickerTexture = StickerCache.Get(stickerName);
-        if (stickerName != null) original = ""; // nothing to copy from a picture
+        if (stickerName != null || mine) original = ""; // nothing to copy from a picture, and the player's own words get no copy button
         bubble.Original = original;
         bubble.CopyBox.SetActive(original.Length > 0);
         if (!ReferenceEquals(_copied, bubble)) bubble.CopyBack.color = CopyIdle; // a reused bubble starts plain
@@ -624,7 +637,7 @@ internal sealed class ChatPanel
         {
             bubble.Sticker.texture = stickerTexture;
             var side = Math.Min(StickerSize, bodyHeight);
-            UiKit.Place(bubble.Sticker.gameObject, 6 + 8, top + Pad + nameHeight, side, side);
+            UiKit.Place(bubble.Sticker.gameObject, mine ? 6 + width - 8 - side : 6 + 8, top + Pad + nameHeight, side, side);
             bubble.Body.gameObject.SetActive(false);
         }
         else bubble.Body.gameObject.SetActive(true);

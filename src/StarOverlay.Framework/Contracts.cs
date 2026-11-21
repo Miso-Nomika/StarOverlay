@@ -82,7 +82,7 @@ public sealed record EncounterPlayerView(
     IReadOnlyList<MeterImagineView>? Imagines = null,
     long FirstHitTicks = 0);
 
-public sealed record EncounterHead(string Id, string Name, DateTime Started, bool Current);
+public sealed record EncounterHead(string Id, string Name, DateTime Started, bool Current, string EndReason = "");
 
 public sealed record EncounterView(
     string Id,
@@ -91,7 +91,8 @@ public sealed record EncounterView(
     DateTime? Ended,
     bool Current,
     long TotalDamage,
-    IReadOnlyList<EncounterPlayerView> Players);
+    IReadOnlyList<EncounterPlayerView> Players,
+    string EndReason = "");
 
 /// <summary>One round icon. The window counts the remaining time itself from <paramref name="EndsAtMs"/> (this PC's clock), so the plugin gives no remaining seconds.</summary>
 public sealed record IconView(

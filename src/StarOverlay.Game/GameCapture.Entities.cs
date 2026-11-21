@@ -353,30 +353,26 @@ public sealed partial class GameCapture
 
     DateTime _lastWipeClose;
 
-    /// <summary>How long after a dungeon end, a boss kill or a wipe the meter is cleared (the players can still read the result).</summary>
+    /// <summary>How long after a dungeon end, a boss kill or a boss reset (a wipe) the meter is cleared (the players can still read the result).</summary>
     internal static readonly TimeSpan EncounterEndDelay = TimeSpan.FromSeconds(3);
 
-    /// <summary>Everyone who fought has to stay dead this long before it counts as a wipe (a quick revive is not one); the meter clears then.</summary>
-    internal static readonly TimeSpan WipeStayDead = TimeSpan.FromSeconds(3);
-
     /// <summary>Ends the fight now (zero delay) or after <paramref name="delay"/>.</summary>
-    internal static void EndEncounter(TimeSpan delay)
+    internal static void EndEncounter(TimeSpan delay, EncounterEndKind kind = EncounterEndKind.None)
     {
-        if (delay <= TimeSpan.Zero) LiveCombat.NoteEncounterEnd();
-        else LiveCombat.ScheduleEncounterEnd(delay);
+        if (delay <= TimeSpan.Zero) LiveCombat.NoteEncounterEnd(kind);
+        else LiveCombat.ScheduleEncounterEnd(delay, kind);
     }
 
     /// <summary>
-    /// The party wiped: close the fight so the meter starts from zero (once per wipe, only when there was a fight).
-    /// <paramref name="delay"/> is how long to wait before clearing; the boss-based wipes wait the usual three seconds.
+    /// The boss was reset (the party wiped): close the fight so the meter starts from zero, three seconds later (once per wipe, only when there was a fight).
+    /// A wipe in a section of ordinary monsters does not count: the party revives there and goes on fighting.
     /// </summary>
-    void CloseFightByWipe(string why, TimeSpan? delay = null)
+    void CloseFightByWipe(string why)
     {
         if ((DateTime.UtcNow - _lastWipeClose).TotalSeconds < 5) return;
-        if (!LiveCombat.Recordable || !_fighters.Values.Any(fighter => fighter.Damage > 0)) return;
+        if (!LiveCombat.Encounters || !_fighters.Values.Any(fighter => fighter.Damage > 0)) return;
         _lastWipeClose = DateTime.UtcNow;
-        var wait = delay ?? EncounterEndDelay;
-        EndEncounter(wait);
+        EndEncounter(EncounterEndDelay, EncounterEndKind.Wipe);
     }
 
     void NoteMonsterHp(long uuid, long hp)
@@ -413,10 +409,10 @@ public sealed partial class GameCapture
     {
         if (monster.Closed || !monster.Dead || !monster.SeenAlive || monster.Id <= 0) return;
         if (!_bosses.Contains(monster.Id)) return;
-        if (!LiveCombat.Recordable) return;
+        if (!LiveCombat.Encounters) return;
         if (!_fighters.Values.Any(fighter => fighter.Damage > 0)) return;
         monster.Closed = true;
-        LiveCombat.ScheduleEncounterEnd(TimeSpan.FromSeconds(3));
+        LiveCombat.ScheduleEncounterEnd(TimeSpan.FromSeconds(3), EncounterEndKind.BossKill);
     }
 
     Monster TakeMonster(long uuid)

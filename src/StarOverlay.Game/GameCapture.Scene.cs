@@ -124,30 +124,6 @@ public sealed partial class GameCapture
         }
     }
 
-    void OnLeaveTeam(ReadOnlySpan<byte> payload, ExtraPacketData _)
-    {
-        try
-        {
-            var request = GrpcTeamNtf.Types.NotifyLeaveTeam.Parser.ParseFrom(payload).VRequest;
-            if (request == null || request.CharId == 0) return;
-            var mine = false;
-            var inside = false;
-            lock (_gate)
-            {
-                var selfId = _self >> 16;
-                mine = selfId != 0 && request.CharId == selfId;
-                inside = _dungeonState != EDungeonState.DungeonStateNull || InInstance();
-            }
-
-            if (mine && inside) ForgetRoster();
-        }
-        catch (Exception ex)
-        {
-            _lastError = ex.Message;
-            Interlocked.Increment(ref _errors);
-        }
-    }
-
     void NoteTransfer(TransferParam transfer)
     {
         var changed = false;
@@ -205,6 +181,7 @@ public sealed partial class GameCapture
             _sceneName = _scenes.TryGetValue(_sceneId, out var name) ? name : "";
             if (!continued)
                 _dungeonState = EDungeonState.DungeonStateNull;
+                _masterDifficulty = 0;
         }
 
         if (!changed)
@@ -220,6 +197,7 @@ public sealed partial class GameCapture
             BeginFreshRoster(awaitSelf: false);
             _freshRoster = false;
             _dungeonState = EDungeonState.DungeonStateNull;
+            _masterDifficulty = 0;
             return true;
         }
 
@@ -227,6 +205,7 @@ public sealed partial class GameCapture
         BeginFreshRoster(awaitSelf: false);
         _freshRoster = false;
         _dungeonState = EDungeonState.DungeonStateNull;
+        _masterDifficulty = 0;
         return true;
     }
 
@@ -263,20 +242,6 @@ public sealed partial class GameCapture
         }
     }
 
-    void ForgetRoster()
-    {
-        lock (_gate) ClearRoster();
-        Publish();
-        PublishLocation();
-        LiveCombat.NoteMap();
-    }
-
-    void ClearRoster()
-    {
-        BeginFreshRoster(awaitSelf: true);
-        _dungeonState = EDungeonState.DungeonStateNull;
-    }
-
     void BeginFreshRoster(bool awaitSelf)
     {
         _fighters.Clear();
@@ -288,6 +253,8 @@ public sealed partial class GameCapture
         _clearedTargets.Clear();
         _openTargets.Clear();
         _targetNums.Clear();
+        _sectionCleared = false;
+        _vaultCleared = false;
     }
 
     enum SceneStep { Same, Stay, Reset }
@@ -318,12 +285,6 @@ public sealed partial class GameCapture
         _freshRoster = false;
     }
 
-    bool InInstance()
-    {
-        var name = SceneName();
-        return _masterScenes.Contains(_sceneId) || _raidScenes.Contains(_sceneId) || _vaultScenes.Contains(_sceneId) || IsVault(name);
-    }
-
     void OnDungeon(ReadOnlySpan<byte> payload, ExtraPacketData _)
     {
         try
@@ -331,6 +292,7 @@ public sealed partial class GameCapture
             var data = SyncDungeonData.Parser.ParseFrom(payload).VData;
             if (data == null) return;
             if (data.FlowInfo != null) NoteDungeon(data.FlowInfo.State);
+            if (data.DungeonSceneInfo is { Difficulty: > 0 } sceneInfo) NoteDifficulty(sceneInfo.Difficulty);
             if (data.Target?.TargetData == null) return;
             foreach (var target in data.Target.TargetData)
                 NoteTrashClear(target.Key, target.Value.TargetId, target.Value.Nums, target.Value.Complete, live: false);
@@ -363,74 +325,56 @@ public sealed partial class GameCapture
         }
     }
 
-    DateTime _deadSince;
-    bool _wipeClosed;
-
-    /// <summary>
-    /// A wipe: everyone who took part in the fight (the player and everyone who did damage) is dead, and stays dead for a moment.
-    /// The game sends no dungeon-end signal for it, so the fight is closed here: the meter starts from zero when the party is back.
-    /// (The original ZDPS finds a wipe from the player's state pattern dead - teleport and the bosses' health; this looks at the
-    /// party directly, which also fits solo and raid fights.)
-    /// </summary>
-    void CheckWipe()
+    /// <summary>The server told the difficulty of the dungeon we are in (master 1-6): the place may now count as recorded or not.</summary>
+    void NoteDifficulty(int difficulty)
     {
-        var close = false;
         lock (_gate)
         {
-            if (!LiveCombat.Recordable)
-            {
-                _deadSince = default;
-                _wipeClosed = false;
-                return;
-            }
-
-            var taking = _fighters.Where(pair => pair.Key == _self || pair.Value.Damage > 0).Select(pair => pair.Value).ToList();
-            var allDead = taking.Any(fighter => fighter.Damage > 0) && taking.All(fighter => fighter.Dead);
-            if (!allDead)
-            {
-                _deadSince = default;
-                _wipeClosed = false;
-                return;
-            }
-
-            if (_deadSince == default)
-            {
-                _deadSince = DateTime.UtcNow;
-                return;
-            }
-
-            if (!_wipeClosed && (DateTime.UtcNow - _deadSince).TotalSeconds >= WipeStayDead.TotalSeconds)
-            {
-                _wipeClosed = true;
-                close = true;
-            }
+            if (_masterDifficulty == difficulty) return;
+            _masterDifficulty = difficulty;
         }
 
-        if (!close) return;
-        lock (_gate) CloseFightByWipe("everyone who fought is dead", TimeSpan.Zero); // the three seconds were already spent staying dead
+        PublishLocation();
     }
 
     internal void NoteDungeon(EDungeonState state)
     {
         var close = false;
+        var kind = EncounterEndKind.DungeonEnd;
         lock (_gate)
         {
-            close = state == EDungeonState.DungeonStateEnd && _dungeonState != state && LiveCombat.Recordable;
+            close = state == EDungeonState.DungeonStateEnd && _dungeonState != state && LiveCombat.Encounters;
             _dungeonState = state;
+            // a Stimen Vault ends both when every enemy is down and when its time runs out: the record tells which
+            if (_vaultScenes.Contains(_sceneId)) kind = _vaultCleared ? EncounterEndKind.VaultClear : EncounterEndKind.VaultFail;
         }
 
         if (close)
-            EndEncounter(EncounterEndDelay); // the dungeon end signal clears the meter three seconds later, not at the same instant
+            EndEncounter(EncounterEndDelay, kind); // the dungeon end signal clears the meter three seconds later, not at the same instant
     }
 
     void NoteTrashClear(int key, int targetId, int nums, int complete, bool live)
     {
         if (targetId <= 0) targetId = key;
+        if (targetId > 0 && complete == 1 && _killAllTargets.Contains(targetId))
+        {
+            var cleared = false;
+            lock (_gate)
+            {
+                if (_vaultScenes.Contains(_sceneId)) cleared = _vaultCleared = true; // the floor is cleared: the end of the vault is a success
+            }
+
+            // the server sends the vault's end first and this goal a moment later: an end already waiting is told as a success
+            if (cleared) LiveCombat.ReplacePendingEnd(EncounterEndKind.VaultFail, EncounterEndKind.VaultClear);
+        }
+
         if (targetId <= 0 || targetId is 3010101 or 3010102) return;
         var schedule = false;
         lock (_gate)
         {
-            if (!_masterScenes.Contains(_sceneId)) return;
+            if (!_masterScenes.Contains(_sceneId) && !_extremeHardScenes.Contains(_sceneId) && !_guildHuntScenes.Contains(_sceneId)) return;
+            // only the "조사를 완료" goal ends the trash section, and only once per visit (some places hold a second goal of the same kind)
+            if (_sectionCleared || (_surveyTargets.Count > 0 && !_surveyTargets.Contains(targetId))) return;
             if (nums > 0)
                 _targetNums[targetId] = nums;
             else if (complete == 1 && _targetNums.TryGetValue(targetId, out var seen))
@@ -448,12 +392,13 @@ public sealed partial class GameCapture
             }
 
             _clearedTargets.Add(targetId);
+            _sectionCleared = true;
             schedule = true;
         }
 
         if (schedule)
         {
-            LiveCombat.ScheduleEncounterEnd(TimeSpan.FromSeconds(3));
+            LiveCombat.ScheduleEncounterEnd(TimeSpan.FromSeconds(3), EncounterEndKind.SectionClear);
         }
     }
 
@@ -485,7 +430,7 @@ public sealed partial class GameCapture
         if (_sceneName.Length == 0 && _sceneId > 0 && _scenes.TryGetValue(_sceneId, out var loaded))
             _sceneName = loaded;
         var parts = new List<string>();
-        if (_sceneName.Length > 0) parts.Add(LocalizeScene(_scenesKo, _sceneId, _sceneName));
+        if (_sceneName.Length > 0) parts.Add(LocationTitle(_sceneName)); // the same title as the records: "극한공간 하드 · 거울 속의 심판", "레이드 · ..."
         else if (_sceneId > 0) parts.Add($"지역 {_sceneId}");
         if (_self != 0 && _fighters.TryGetValue(_self, out var self) && self.HasPos)
             parts.Add($"X {self.X:0}  Z {self.Z:0}");
@@ -496,14 +441,39 @@ public sealed partial class GameCapture
     {
         string title;
         bool recordable;
+        bool encounters;
         lock (_gate)
         {
             var name = SceneName();
-            recordable = IsGuildScene(_sceneId, name) || IsVault(name) || _masterScenes.Contains(_sceneId) || _raidScenes.Contains(_sceneId) || _vaultScenes.Contains(_sceneId);
+            var guildCenter = IsGuildScene(_sceneId, name);
+            var vault = IsVault(name) || _vaultScenes.Contains(_sceneId);
+            var master = _masterScenes.Contains(_sceneId);
+            var raid = _raidScenes.Contains(_sceneId);
+            var extremeHard = _extremeHardScenes.Contains(_sceneId);
+            var guildHunt = _guildHuntScenes.Contains(_sceneId);
+            recordable = IsRecordable(guildCenter, vault, master, _masterDifficulty, raid, extremeHard, guildHunt, LiveCombat.RecordExtra);
+            encounters = IsRecordable(guildCenter, vault, master, _masterDifficulty, raid, extremeHard, guildHunt, recordMore: true); // the places that can be recorded all have encounters
             title = LocationTitle(name);
         }
 
-        LiveCombat.SetLocation(title, recordable);
+        LiveCombat.SetLocation(title, recordable, encounters);
+    }
+
+    int _masterDifficulty; // the difficulty (1-6) of the master dungeon we are in, 0 while it is not known
+
+    const int MasterEasiest = 1;
+    const int MasterHardest = 6;
+
+    /// <summary>
+    /// Whether the fights of a place are recorded. By default: the guild center, the vault, the raids and the master dungeons except master 1 and 6.
+    /// With the "record more" choice also master 1 and 6, the hard extreme space and the guild hunts. A master dungeon whose difficulty is
+    /// not known yet counts as recorded (nothing is lost if the packet that says it is missed).
+    /// </summary>
+    internal static bool IsRecordable(bool guildCenter, bool vault, bool master, int masterDifficulty, bool raid, bool extremeHard, bool guildHunt, bool recordMore)
+    {
+        if (guildCenter || vault || raid) return true;
+        if (master) return recordMore || masterDifficulty is not (MasterEasiest or MasterHardest);
+        return recordMore && (extremeHard || guildHunt);
     }
 
     string SceneName()
@@ -514,18 +484,31 @@ public sealed partial class GameCapture
     }
 
     string LocationTitle(string name) =>
-        ComposeTitle(name, LocalizeScene(_scenesKo, _sceneId, name), _masterScenes.Contains(_sceneId), _raidScenes.Contains(_sceneId), IsVault(name) || _vaultScenes.Contains(_sceneId), IsGuildScene(_sceneId, name));
+        ComposeTitle(name, LocalizeScene(_scenesKo, _sceneId, name), _masterScenes.Contains(_sceneId), _raidScenes.Contains(_sceneId), IsVault(name) || _vaultScenes.Contains(_sceneId), IsGuildScene(_sceneId, name), _masterDifficulty, _extremeKinds.GetValueOrDefault(_sceneId, ""));
 
     /// <summary>The kind of place plus its name. <paramref name="english"/> decides (guild); <paramref name="shown"/> is what the player reads.</summary>
-    internal static string ComposeTitle(string english, string shown, bool master, bool raid, bool vault, bool guild = false)
+    internal static string ComposeTitle(string english, string shown, bool master, bool raid, bool vault, bool guild = false, int masterDifficulty = 0, string extremeLevel = "")
     {
         if (guild || IsGuild(english)) return "길드 센터";
-        if (master) return shown.Length == 0 ? "마스터 극한공간" : "마스터 극한공간 · " + shown;
+        if (master)
+        {
+            var kind = masterDifficulty > 0 ? "마스터 극한공간 · 난이도 " + masterDifficulty : "마스터 극한공간";
+            return shown.Length == 0 ? kind : kind + " · " + shown;
+        }
+
         if (raid) return shown.Length == 0 ? "레이드" : "레이드 · " + shown;
         if (vault)
         {
             if (shown.Length == 0) return "시디문 유적";
             return shown.Contains("시디문", StringComparison.Ordinal) ? shown : "시디문 유적 · " + shown; // "시디문 유적 5층" already says it
+        }
+
+        // the extreme space: the normal and the hard level have the same scene name, so the level is put in front of it
+        // (the place names start with "극한" themselves, which the prefix already says)
+        if (extremeLevel.Length > 0)
+        {
+            var place = shown.StartsWith("극한", StringComparison.Ordinal) ? shown[2..].TrimStart(' ', '・', '·') : shown;
+            return place.Length == 0 ? "극한공간 " + extremeLevel : "극한공간 " + extremeLevel + " · " + place;
         }
 
         return shown;

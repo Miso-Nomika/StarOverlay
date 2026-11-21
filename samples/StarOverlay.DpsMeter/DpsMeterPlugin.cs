@@ -21,6 +21,8 @@ public sealed class DpsMeterPlugin : IPlugin
         context.Controls.AddToggle("show-imagines", "이매진 표시", true);
         context.Controls.AddToggle("show-power", "전투력 표시", true);
         context.Controls.AddToggle("show-season", "시즌 강도 표시", true);
+        LiveCombat.SetRecordExtra(context.Settings.Get("record-extra") == "true"); // off until the player asks for it
+        context.Controls.AddToggle("record-extra", "극한공간 하드, 마스터 1, 마스터 6, 길드 사냥 기록 추가", false, LiveCombat.SetRecordExtra);
         context.Controls.AddText("row-height", "행 높이", "24", 18, 72);
         context.Controls.AddText("font-size", "글자 크기", "15", 8, 40);
         context.Ui.AddMeter("dps.meter.rows", () => _session.Rows(context), () => _session.RowHeight(context), () => _session.TextSize(context));
@@ -50,6 +52,8 @@ public sealed partial class MeterSession
     private int _encounterEnds;
     private int _combatEpoch;
     private bool _holdClock = true;
+    private bool _placeRecordable; // whether the place the damage was dealt in is recorded, and its name: what was true at the last look,
+    private string _placeName = ""; // because the game has already published the next place when the meter notices the move
     private bool _keepMembers;
 
     public void Open(string gameDirectory) => _game = gameDirectory;
@@ -57,15 +61,15 @@ public sealed partial class MeterSession
     public void Reset()
     {
         LiveCombat.CancelScheduledEnd();
-        ZeroFight();
+        ZeroFight(EncounterEndKind.Manual);
     }
 
-    private void ZeroFight()
+    private void ZeroFight(EncounterEndKind kind)
     {
         _keepMembers = true;
         Poll();
         RecordPlayers();
-        FinishDraft();
+        FinishDraft(kind);
         _baseline.Clear();
         foreach (var player in _players)
             _baseline[player.Name] = player.Damage;
@@ -78,7 +82,7 @@ public sealed partial class MeterSession
     private void ResetMap()
     {
         RecordPlayers();
-        FinishDraft();
+        FinishDraft(EncounterEndKind.MapMove);
         _keepMembers = false;
         _players.Clear();
         _baseline.Clear();
@@ -141,6 +145,8 @@ public sealed partial class MeterSession
         else if (LiveCombat.EndPending)
             _keepMembers = true;
 
+        _placeRecordable = LiveCombat.Recordable; // from here on the damage belongs to this place
+        _placeName = LiveCombat.Location;
         LiveCombat.SetStarted(_started);
         Poll();
         RecordPlayers();
@@ -208,12 +214,12 @@ public sealed partial class MeterSession
             _encounterEnds = ends;
             if (ends == 0) return false;
             LiveCombat.CancelScheduledEnd();
-            ZeroFight();
+            ZeroFight(LiveCombat.EndKind);
             return true;
         }
 
         if (!LiveCombat.TakeScheduledEnd()) return false;
-        ZeroFight();
+        ZeroFight(LiveCombat.EndKind);
         return true;
     }
 

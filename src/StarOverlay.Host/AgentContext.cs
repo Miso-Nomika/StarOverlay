@@ -56,6 +56,7 @@ internal sealed class AgentContext : ApplicationContext, IIngameHooks
 
         _timer.Tick += (_, _) => Tick();
         _timer.Start();
+        UpdateCheck.Start(); // once per game start: the service lives as long as the game does
     }
 
     public PluginHost Host => _host;
@@ -95,6 +96,17 @@ internal sealed class AgentContext : ApplicationContext, IIngameHooks
 
             _prompt.BringToTop();
         });
+
+    public void OpenReleasePage()
+    {
+        try
+        {
+            Process.Start(new ProcessStartInfo(UpdateCheck.LatestPage) { UseShellExecute = true }); // the address is ours, never one sent by the game window
+        }
+        catch (Exception)
+        {
+        }
+    }
 
     public void CopyText(string text) =>
         _owner.BeginInvoke(() =>

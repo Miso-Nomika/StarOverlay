@@ -20,6 +20,9 @@ public interface IIngameHooks
 
     void OpenPrompt();
 
+    /// <summary>Opens the page of the newest release in the browser.</summary>
+    void OpenReleasePage();
+
     /// <summary>Puts text on the Windows clipboard (a chat message the user chose to copy).</summary>
     void CopyText(string text);
 
@@ -199,6 +202,8 @@ public sealed class UiSnapshotBuilder(IIngameHooks hooks, LayoutStore layouts)
         var window = new WindowDto { Id = RootWindowId, Title = "시스템" };
         foreach (var plugin in hooks.Plugins().OrderBy(p => p.Id, StringComparer.OrdinalIgnoreCase))
             window.Settings.Add(new SettingDto { Key = plugin.Id, Label = DisplayName(plugin.Id), Kind = "plugin", Value = !plugin.Enabled ? "off" : layouts.Get(plugin.Id, new LayoutDto()).HeaderHidden ? "hidden" : "on" });
+        if (LiveUpdate.Available)
+            window.Settings.Add(new SettingDto { Key = "update", Label = "새 버전이 있습니다 (v" + LiveUpdate.Latest + ")", Kind = "notice" });
         window.Layout = layouts.Get(RootWindowId, index, 0.2, 0.04 + 0.032 * Math.Max(1, window.Settings.Count));
         return window;
     }
@@ -322,6 +327,7 @@ public sealed class UiSnapshotBuilder(IIngameHooks hooks, LayoutStore layouts)
         Translation = translation,
         World = line.World,
         Time = line.At.ToString("HH:mm"),
+        Self = line.Self,
         Links = (line.Links ?? []).Select(link =>
         {
             var item = ItemBook.Find(link.ItemId);

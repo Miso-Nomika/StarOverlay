@@ -51,6 +51,7 @@ public static class CommandAction
     public const string Collapse = "collapse";  // value = true/false
     public const string Plugin = "plugin";      // window "root": key = plugin id, value = true/false
     public const string Settings = "settings";  // open the service's settings / record window for the window's plugin
+    public const string Release = "release";    // open the page of the newest release in the browser (the service knows the address, the agent sends none)
     public const string Prompt = "prompt";      // open the translation prompt window of the service
     public const string Set = "set";            // key, value: numbers (clamped to the setting range), choices, or the default value
     public const string Records = "records";    // ask for the window's fight record list
@@ -336,6 +337,9 @@ public sealed class ChatLineDto
 
     /// <summary>Items linked in this message (clicking one opens its card).</summary>
     public List<ChatLinkDto> Links { get; set; } = [];
+
+    /// <summary>Said by the player themself: the window shows these lines on the right.</summary>
+    public bool Self { get; set; }
 }
 
 public sealed class ChatLinkDto
@@ -456,6 +460,9 @@ public sealed class RecordHeadDto
     public string Started { get; set; } = "";
 
     public bool Current { get; set; }
+
+    /// <summary>Why the fight ended ("보스 처치", "직접 초기화"...), empty while it is going on.</summary>
+    public string EndReason { get; set; } = "";
 }
 
 public sealed class RecordDto
@@ -465,6 +472,8 @@ public sealed class RecordDto
     public string Name { get; set; } = "";
 
     public string Started { get; set; } = "";
+
+    public string EndReason { get; set; } = "";
 
     public long TotalDamage { get; set; }
 

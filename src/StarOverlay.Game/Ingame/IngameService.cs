@@ -396,6 +396,9 @@ public sealed class IngameService : IDisposable
             case CommandAction.Copy:
                 if (cmd.Value.Length > 0) _hooks.CopyText(cmd.Value.Length > 4000 ? cmd.Value[..4000] : cmd.Value);
                 break;
+            case CommandAction.Release:
+                if (LiveUpdate.Available) _hooks.OpenReleasePage();
+                break;
             case CommandAction.Prompt:
                 _hooks.OpenPrompt();
                 break;
@@ -418,11 +421,6 @@ public sealed class IngameService : IDisposable
         else if (dto.Max > dto.Min)
         {
             if (int.TryParse(cmd.Value, out var number)) setting.Write(Math.Clamp(number, dto.Min, dto.Max).ToString());
-        }
-        else if (cmd.Value == setting.DefaultValue)
-        {
-            setting.Write(setting.DefaultValue); // "back to default" is the only free-text change possible in game
-            if (cmd.Key == "translate-prompt") TranslationPrompt.Apply(setting.DefaultValue);
         }
     }
 

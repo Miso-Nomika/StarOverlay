@@ -26,6 +26,8 @@ public sealed partial class GameCapture : IDisposable
     readonly HashSet<long> _fighting = [];
     readonly HashSet<int> _clearedTargets = [];
     readonly HashSet<int> _openTargets = [];
+    bool _sectionCleared;
+    bool _vaultCleared;
     readonly Dictionary<int, int> _targetNums = [];
     int _combatArm;
     long _self;
@@ -87,7 +89,6 @@ public sealed partial class GameCapture : IDisposable
             cap.RegisterWorldNotifyHandler(WorldNtf.SyncDungeonDirtyData, OnDungeonDirty);
             cap.RegisterWorldNotifyHandler(WorldNtf.NotifyShowItems, OnShowItems);
             cap.RegisterNotifyHandler((ulong)EServiceId.ChitChatNtf, (uint)ChatNtf.NotifyNewestChitChatMsgs, OnChat);
-            cap.RegisterNotifyHandler((ulong)EServiceId.GrpcTeamNtf, (uint)TeamNtf.NotifyLeaveTeam, OnLeaveTeam);
             cap.RegisterNotifyHandler((ulong)EServiceId.GrpcTeamNtf, (uint)TeamNtf.NotifyApplyJoin, OnApplyJoin);
             cap.RegisterNotifyHandler((ulong)EServiceId.GrpcTeamNtf, (uint)TeamNtf.NotifyTeamJoinApplyChanged, OnApplyChanged);
             cap.RegisterProxyHandler((uint)EProxyServiceId.World, (uint)WorldCall.DealApplyJoin, OnDealApply);
@@ -103,7 +104,6 @@ public sealed partial class GameCapture : IDisposable
             _cap = cap;
             _timer = new System.Threading.Timer(_ =>
             {
-                CheckWipe();
                 Publish();
                 WriteLiveStatus();
             }, null, 100, 100);

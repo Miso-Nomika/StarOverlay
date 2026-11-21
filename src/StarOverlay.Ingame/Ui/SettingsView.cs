@@ -68,11 +68,15 @@ internal sealed partial class SettingsView
         UiKit.Scroll(_panel, steps =>
         {
             if (_dto == null || _tab != "settings") return;
-            var next = Math.Clamp(_scroll + steps, 0, Math.Max(0, _dto.Settings.Count - 1));
+            var next = Math.Clamp(_scroll + steps, 0, MaxSettingsScroll(_dto));
             if (next == _scroll) return;
             _scroll = next;
             Dirty();
         });
+        _probe = UiKit.Text("Probe", _window.transform, 14, new Color(0f, 0f, 0f, 0f), TextAlignmentOptions.TopLeft);
+        _probe.enableWordWrapping = true;
+        _probe.overflowMode = TextOverflowModes.Overflow;
+        UiKit.Place(_probe.gameObject, 0, 0, 10, 10);
         _body = UiKit.Node("Body", _panel.transform);
         _body.AddComponent<RectMask2D>();
         _header = UiKit.Node("Header", _window.transform);
@@ -274,15 +278,31 @@ internal sealed partial class SettingsView
         else BuildRecords(bw, bh);
     }
 
+    double _listW, _listH; // size of the settings list when it was last drawn
+
+    /// <summary>The height of one row of the settings list (a long text gets as many lines as it has, up to what the window can show).</summary>
+    double SettingHeight(SettingDto setting, double bw, double bh) =>
+        setting.Multiline ? Math.Min(TextHeight(setting.Value, bw) + 64, Math.Max(RowHeight, bh)) : setting.Kind == "tool" || setting.Hint.Length > 0 ? RowHeight + 22 : RowHeight;
+
+    /// <summary>
+    /// How far the list can be scrolled: the first row from which everything below still fits in the window. When all rows fit there is
+    /// nothing to scroll (the wheel must not push the list up and leave empty space under it).
+    /// </summary>
+    int MaxSettingsScroll(WindowDto dto) =>
+        ListScroll.Max(dto.Settings.Select(setting => SettingHeight(setting, _listW, _listH)).ToList(), 4, _listH);
+
     void BuildSettings(WindowDto dto, double bw, double bh)
     {
+        _listW = bw;
+        _listH = bh;
+        _scroll = Math.Min(_scroll, MaxSettingsScroll(dto)); // a window that grew may have room for everything now
         double y = 0;
         var skip = _scroll;
         var shown = 0;
         foreach (var setting in dto.Settings)
         {
             // a long text (the translation prompt) gets as many lines as it has, up to what the window can show
-            var h = setting.Multiline ? Math.Min(TextHeight(setting.Value, bw) + 64, Math.Max(RowHeight, bh)) : setting.Kind == "tool" || setting.Hint.Length > 0 ? RowHeight + 22 : RowHeight;
+            var h = SettingHeight(setting, bw, bh);
             if (skip > 0)
             {
                 skip--;
@@ -367,10 +387,8 @@ internal sealed partial class SettingsView
             preview.enableWordWrapping = true;
             preview.overflowMode = TextOverflowModes.Ellipsis;
             preview.alignment = TextAlignmentOptions.TopLeft;
-            Btn(back.transform, "입력하기", right - 230, h - 28, 110, 22, Button, () =>
+            Btn(back.transform, "입력하기", right - 110, h - 28, 110, 22, Button, () =>
                 _root.Send(new CommandDto { Window = _plugin, Action = CommandAction.Prompt }));
-            Btn(back.transform, "기본값으로", right - 110, h - 28, 110, 22, Button, () =>
-                _root.Send(new CommandDto { Window = _plugin, Action = CommandAction.Set, Key = setting.Key, Value = setting.Default }));
         }
         else
         {
@@ -404,13 +422,20 @@ internal sealed partial class SettingsView
         }
     }
 
-    /// <summary>Height the text needs when wrapped to the row width (every explicit line break counts, long lines wrap).</summary>
-    static double TextHeight(string text, double width)
+    TextMeshProUGUI _probe; // an invisible label the text is measured with (it has to be active for the text engine)
+    readonly Dictionary<string, double> _textHeights = new();
+
+    /// <summary>The height the text really needs when wrapped to the row width (measured with the same font and size it is drawn with).</summary>
+    double TextHeight(string text, double width)
     {
-        var perLine = Math.Max(8, (int)((width - 16) / 13)); // about 13 reference pixels per Korean character at size 14
-        var lines = 0;
-        foreach (var line in text.Split('\n')) lines += Math.Max(1, (line.Length + perLine - 1) / perLine);
-        return lines * 18;
+        var shown = Esc(text);
+        var key = shown.GetHashCode() + "|" + shown.Length + "|" + (int)width;
+        if (_textHeights.TryGetValue(key, out var known)) return known;
+        _probe.fontSize = 14;
+        var height = Math.Max(18, _probe.GetPreferredValues(shown, (float)(width - 16), 0f).y + 2);
+        if (_textHeights.Count > 200) _textHeights.Clear();
+        _textHeights[key] = height;
+        return height;
     }
 
     void Step(SettingDto setting, int value) =>
@@ -456,7 +481,7 @@ internal sealed partial class SettingsView
         }
 
         if (_record != null)
-            Text(_body.transform, $"{Esc(_record.Name)}  <color=#9ea9bb>{_record.Started} · {TimeSpan.FromSeconds(_record.Seconds):mm\\:ss}  ·  총 피해 {UnitFormat.Short(_record.TotalDamage)}</color>", 200, 0, Math.Max(40, w - 200 - infoRight - 8), 22, 13, Color.white);
+            Text(_body.transform, $"{Esc(_record.Name)}  <color=#9ea9bb>{_record.Started}{(_record.EndReason.Length > 0 ? " · </color><color=" + ReasonColor(_record.EndReason) + ">" + _record.EndReason + "</color><color=#9ea9bb>" : "")} · {TimeSpan.FromSeconds(_record.Seconds):mm\\:ss}  ·  총 피해 {UnitFormat.Short(_record.TotalDamage)}</color>", 200, 0, Math.Max(40, w - 200 - infoRight - 8), 22, 13, Color.white);
 
         var maxRecordScroll = Math.Max(0, _heads.Count - visibleRecords);
         _rScroll = Math.Clamp(_rScroll, 0, maxRecordScroll);
@@ -476,7 +501,11 @@ internal sealed partial class SettingsView
             var box = item.transform.parent.gameObject;
             UiKit.Place(box, 0, ry, w, listRowH - 2);
             item.text = "";
-            Text(box.transform, Esc(Fit(head.Name, w - 350)), 8, 0, w - 350, listRowH - 2, 13, Color.white);
+            // two columns without a line between them: why the fight ended (yellow, always the same width so the titles line up), then the title
+            const double reasonColumn = 100;
+            if (head.EndReason.Length > 0)
+                Text(box.transform, "<color=" + ReasonColor(head.EndReason) + ">" + Esc(Fit(head.EndReason, reasonColumn - 8)) + "</color>", 8, 0, reasonColumn - 8, listRowH - 2, 13, Color.white);
+            Text(box.transform, Esc(Fit(head.Name, w - 350 - reasonColumn)), 8 + reasonColumn, 0, w - 350 - reasonColumn, listRowH - 2, 13, Color.white);
             Text(box.transform, head.Started + (head.Current ? "  <color=#8fe0a8>진행 중</color>" : ""), w - 322, 0, 270, listRowH - 2, 13, muted, TextAlignmentOptions.MidlineRight);
             if (!head.Current)
             {
@@ -880,6 +909,14 @@ internal sealed partial class SettingsView
         _fitted[key] = result;
         return result;
     }
+    /// <summary>Blue for a move to another place or a reset by hand, red for a failure, yellow for a clear (section, boss, dungeon) and the rest.</summary>
+    static string ReasonColor(string reason) => reason switch
+    {
+        "장소 이동" or "직접 초기화" => "#6fb4ff",
+        "전멸" or "던전 실패" => "#ff6b6b",
+        _ => "#e8c27a",
+    };
+
     static string Esc(string text) => text.Replace("<", "<​");
 
     TextMeshProUGUI Text(Transform parent, string text, double x, double y, double w, double h, float size, Color color,

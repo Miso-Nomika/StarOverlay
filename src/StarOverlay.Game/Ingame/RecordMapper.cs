@@ -17,7 +17,7 @@ public static class RecordMapper
         IReadOnlyList<EncounterHead> heads;
         try
         {
-            heads = log.Heads?.Invoke() ?? log.Records().Select(r => new EncounterHead(r.Id, r.Name, r.Started, r.Current)).ToList();
+            heads = log.Heads?.Invoke() ?? log.Records().Select(r => new EncounterHead(r.Id, r.Name, r.Started, r.Current, r.EndReason)).ToList();
         }
         catch (Exception)
         {
@@ -25,7 +25,7 @@ public static class RecordMapper
         }
 
         return heads.OrderByDescending(h => h.Started).Take(MaxHeads)
-            .Select(h => new RecordHeadDto { Id = h.Id, Name = h.Name, Started = h.Started.ToString("MM-dd HH:mm"), Current = h.Current })
+            .Select(h => new RecordHeadDto { Id = h.Id, Name = h.Name, Started = h.Started.ToString("MM-dd HH:mm"), Current = h.Current, EndReason = h.EndReason })
             .ToList();
     }
 
@@ -34,7 +34,7 @@ public static class RecordMapper
     {
         try
         {
-            var heads = log.Heads?.Invoke() ?? log.Records().Select(r => new EncounterHead(r.Id, r.Name, r.Started, r.Current)).ToList();
+            var heads = log.Heads?.Invoke() ?? log.Records().Select(r => new EncounterHead(r.Id, r.Name, r.Started, r.Current, r.EndReason)).ToList();
             return heads.Where(h => !h.Current).OrderBy(h => h.Started).Take(count).Select(h => h.Id).ToList();
         }
         catch (Exception)
@@ -105,6 +105,7 @@ public static class RecordMapper
             Id = view.Id,
             Name = view.Name,
             Started = view.Started.ToString("MM-dd HH:mm"),
+            EndReason = view.EndReason,
             TotalDamage = view.TotalDamage,
             Seconds = seconds,
             Players = players,

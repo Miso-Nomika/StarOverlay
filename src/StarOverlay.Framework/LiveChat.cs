@@ -4,7 +4,7 @@ namespace StarOverlay.Framework;
 /// <summary>An item linked in a chat message.</summary>
 public sealed record ChatLink(int ItemId, long Count);
 
-public sealed record ChatLineView(DateTime At, string Channel, string Name, string Text, int World = 0, IReadOnlyList<ChatLink>? Links = null);
+public sealed record ChatLineView(DateTime At, string Channel, string Name, string Text, int World = 0, IReadOnlyList<ChatLink>? Links = null, bool Self = false);
 
 public static class LiveChat
 {
@@ -34,7 +34,7 @@ public static class LiveChat
     /// Adds a line. <paramref name="at"/> is when it was said (null = now); an older line (chat history) is placed among the
     /// newer ones by time. <paramref name="world"/> is the world channel of a history line (null = the channel the game is on now).
     /// </summary>
-    public static bool Add(long messageId, string channel, string name, string text, DateTime? at = null, int? world = null, IReadOnlyList<ChatLink>? links = null)
+    public static bool Add(long messageId, string channel, string name, string text, DateTime? at = null, int? world = null, IReadOnlyList<ChatLink>? links = null, bool self = false)
     {
         text = text.Trim();
         if (text.Length == 0) return false;
@@ -50,7 +50,7 @@ public static class LiveChat
             }
 
             var channelNumber = channel == WorldChannelName ? world ?? WorldChannel : 0;
-            var line = new ChatLineView(at ?? DateTime.Now, channel, name, text, channelNumber, links is { Count: > 0 } ? links : null);
+            var line = new ChatLineView(at ?? DateTime.Now, channel, name, text, channelNumber, links is { Count: > 0 } ? links : null, self);
             var index = _lines.Length;
             while (index > 0 && _lines[index - 1].At > line.At) index--; // history goes before the newer lines
             var next = new ChatLineView[_lines.Length + 1];

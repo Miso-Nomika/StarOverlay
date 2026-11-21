@@ -189,11 +189,9 @@ internal static class QwenTranslator
         return await response.Content.ReadAsStringAsync();
     }
 
-    private static object[] Messages(string text, string prompt) =>
-    [
-        new { role = "system", content = prompt },
-        new { role = "user", content = text },
-    ];
+    private static object[] Messages(string text, string prompt) => string.IsNullOrWhiteSpace(prompt)
+        ? [new { role = "user", content = text }]
+        : [new { role = "system", content = prompt }, new { role = "user", content = text }];
 
     private static string Clean(string json, string source)
     {
