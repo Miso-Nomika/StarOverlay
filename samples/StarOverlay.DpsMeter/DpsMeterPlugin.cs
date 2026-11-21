@@ -8,7 +8,7 @@ public sealed class DpsMeterPlugin : IPlugin
 {
     private readonly MeterSession _session = new();
 
-    public PluginInfo Info { get; } = new("dps.meter", "미터기", "0.4.3");
+    public PluginInfo Info { get; } = new("dps.meter", "미터기", "0.4.5");
 
     public void Load(IPluginContext context)
     {
