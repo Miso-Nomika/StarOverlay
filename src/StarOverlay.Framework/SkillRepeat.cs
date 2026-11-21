@@ -1,7 +1,7 @@
 namespace StarOverlay.Framework;
 
 /// <summary>
-/// The skills the player chose to keep firing while their key is held (plugin "선입력"), and the skills pressed lately (the candidates
+/// The skills the player chose to keep firing while their key is held (plugin "연속 입력"), and the skills pressed lately (the candidates
 /// to choose from). The service sends the choice to the in-game agent, which does the repeating.
 /// </summary>
 public static class SkillRepeat

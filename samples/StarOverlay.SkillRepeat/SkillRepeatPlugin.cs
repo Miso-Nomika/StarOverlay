@@ -4,7 +4,7 @@ using StarOverlay.Framework;
 namespace StarOverlay.PreInput;
 
 /// <summary>
-/// "선입력": the window lists the skills the player has used, each with its picture and "켜짐"/"꺼짐"; pressing a row switches the skill on or off,
+/// "연속 입력": the window lists the skills the player has used, each with its picture and "켜짐"/"꺼짐"; pressing a row switches the skill on or off,
 /// the "✕" of a row deletes it. A skill that is on keeps firing while its key is held (the in-game agent repeats the game's own "use this skill"
 /// call; this plugin only keeps the choice). The repeat interval is stepped with the − and + of the row at the top of the same window: the plugin has no
 /// settings window.
@@ -21,14 +21,14 @@ public sealed class SkillRepeatPlugin : IPlugin
     private RepeatModel? _model;
     private Timer? _poll;
 
-    public PluginInfo Info { get; } = new("skill.repeat", "선입력", "0.4.6");
+    public PluginInfo Info { get; } = new("skill.repeat", "연속 입력", "0.4.6");
 
     public void Load(IPluginContext context)
     {
         _context = context;
         var library = Path.Combine(context.PluginDirectory, "assets", "library");
         var model = _model = new RepeatModel(key => context.Settings.Get(key), (key, value) => context.Settings.Set(key, value), library);
-        context.Ui.AddLabel("skill.repeat.hint", "선입력", Hint);
+        context.Ui.AddLabel("skill.repeat.hint", "연속 입력", Hint);
         context.Ui.AddStepper("interval", "반복 간격", () => Interval() + "ms", Step);
         context.Ui.AddIcons("skill.repeat.skills", model.Rows, () => 36, () => true, model.Toggle, model.Remove);
         SkillRepeat.SetActive(true);

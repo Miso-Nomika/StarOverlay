@@ -4,7 +4,7 @@ using StarOverlay.Framework;
 namespace StarOverlay.PreInput;
 
 /// <summary>
-/// The data of the "선입력" window: the skills the player has used (shown as rows with their picture, in the order they were first used) and
+/// The data of the "연속 입력" window: the skills the player has used (shown as rows with their picture, in the order they were first used) and
 /// which of them are switched on. Both lists are kept in the plugin settings as JSON arrays of game skill ids.
 /// A row stands for a whole skill: the steps of a combo, the enhanced version and the other forms the tables link to it (<see cref="SkillBook.FamilyOf"/>)
 /// all belong to it, so switching the row on repeats all of them. The row is named and pictured by the lowest id of the family.

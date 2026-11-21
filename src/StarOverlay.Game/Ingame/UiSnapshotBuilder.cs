@@ -195,7 +195,7 @@ public sealed class UiSnapshotBuilder(IIngameHooks hooks, LayoutStore layouts)
         "dps.meter" => "미터기",
         "chat" => "채팅",
         "buff.tracker" => "버프 트래커",
-        "skill.repeat" => "선입력",
+        "skill.repeat" => "연속 입력",
         _ => pluginId,
     };
 

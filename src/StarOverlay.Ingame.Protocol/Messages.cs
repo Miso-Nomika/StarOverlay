@@ -55,7 +55,7 @@ public static class CommandAction
     public const string Collapse = "collapse";  // value = true/false
     public const string Plugin = "plugin";      // window "root": key = plugin id, value = true/false
     public const string Settings = "settings";  // open the service's settings / record window for the window's plugin
-    public const string SkillPressed = "skill-pressed"; // agent: key = the game skill id that was just pressed (candidates of the "선입력" plugin)
+    public const string SkillPressed = "skill-pressed"; // agent: key = the game skill id that was just pressed (candidates of the "연속 입력" plugin)
     public const string Prompt = "prompt";      // open the translation prompt window of the service
     public const string Set = "set";            // key, value: numbers (clamped to the setting range), choices, or the default value
     public const string Records = "records";    // ask for the window's fight record list

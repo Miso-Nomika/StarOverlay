@@ -9,7 +9,7 @@ using UnityEngine;
 namespace StarOverlay.Ingame.Skills;
 
 /// <summary>
-/// Plugin "선입력": while the key of a skill the player chose is held, the game's own "fire this skill" call is made again at an interval.
+/// Plugin "연속 입력": while the key of a skill the player chose is held, the game's own "fire this skill" call is made again at an interval.
 /// The game decides every time whether the skill can be used (cooldown, animation) and keeps its own input cache, exactly as for a key press.
 /// No key is simulated and nothing is sent to the server by us. It does nothing until the service says the plugin is loaded, and it stops
 /// when the key is let go, the game loses the focus or a call fails.
@@ -54,40 +54,15 @@ static class HeldSkillRepeater
     static object _pressArgs;
     static System.Reflection.MethodInfo _processAttacks;
     static bool _skipped;        // a repeat found that the slot now holds a skill that is not switched on
-    static bool _accepted;       // (debug) the game took the repeat: it got as far as marking the slot as pressed
     static System.Reflection.PropertyInfo _rowProperty;
     static System.Reflection.PropertyInfo _idProperty;
 
     static readonly List<Hold> Held = new(); // in the order the keys were pressed: the last one decides
-    static int _keysDown;                    // key downs minus key ups the game reported (only for the debug log: it drifts when quick clicks overlap)
     static readonly List<Hold> PressHolds = new(); // the holds made while the game handled the key that was just pressed
     static Hold _target;                     // the key that was repeated at the last look
     static float _next;
 
     static readonly Dictionary<int, float> Reported = new();
-
-    // TEMPORARY (to find why two keys held together do not carry on): a log of what the repeater sees, only while bpsr\skill-repeat-debug.on exists
-    static string _debugFile;
-    static int _debugLines;
-
-    static void Debug(string text)
-    {
-        try
-        {
-            if (_debugFile == null)
-            {
-                var marker = System.IO.Path.Combine(Plugin.GameRoot, "bpsr", "skill-repeat-debug.on");
-                _debugFile = System.IO.File.Exists(marker) ? System.IO.Path.Combine(Plugin.GameRoot, "bpsr", "state", "skill-repeat.txt") : "";
-                if (_debugFile.Length > 0) System.IO.File.WriteAllText(_debugFile, "");
-            }
-
-            if (_debugFile.Length == 0 || _debugLines++ > 4000) return;
-            System.IO.File.AppendAllText(_debugFile, $"{DateTime.Now:HH:mm:ss.fff} {text} | down={_keysDown} held=[{string.Join(",", Held.ConvertAll(h => h.Slot + (h.Repeat ? "R" : "-")))}]{Environment.NewLine}");
-        }
-        catch (Exception)
-        {
-        }
-    }
 
     /// <summary>The service told the chosen skills (called on the game's main thread).</summary>
     public static void Apply(RepeatDto dto, PipeLink link)
@@ -112,7 +87,6 @@ static class HeldSkillRepeater
         {
             var harmony = new Harmony("staroverlay.skillrepeat");
             Hook(harmony, typeof(PlayerInputController), "processAttacksPressed", nameof(BeforeKeyDown), nameof(AfterKeyDown));
-            Hook(harmony, typeof(PlayerInputController), "processAttacksReleased", nameof(BeforeKeyUp));
             Hook(harmony, typeof(ZSkillInputMgr), "FirePlaySkillEvent", nameof(BeforeFire));
             Hook(harmony, typeof(ZSkillInputMgr), "updateSlotPress", nameof(BeforeSlotPress));
             Hook(harmony, typeof(ZSkillInputMgr), "cacheInput", nameof(BeforeRelease));
@@ -140,14 +114,6 @@ static class HeldSkillRepeater
         _pressArgs = inputActionEventData;
         _pressInProgress = true;
         PressHolds.Clear();
-        _keysDown++;
-        Debug("key down");
-    }
-
-    static void BeforeKeyUp()
-    {
-        if (_keysDown > 0) _keysDown--;
-        Debug("key up");
     }
 
     // the game says which slot the pressed key is (AttackPressIdx, the same number as the slot of updateSlotPress), also when it cannot use the skill now:
@@ -159,7 +125,6 @@ static class HeldSkillRepeater
         {
             var slot = __instance.AttackPressIdx;
             var pressing = __instance.IsAttackPress;
-            Debug($"after key down: attack idx {slot}, pressing {pressing}");
             foreach (var hold in PressHolds.ToArray())
             {
                 if (!pressing || slot <= 0)
@@ -191,7 +156,6 @@ static class HeldSkillRepeater
             {
                 // our own repeat: the game found the skill the key means now; one that is not switched on is not fired
                 var id = RowId(skillEnt);
-                Debug($"repeat fires skill {id}");
                 if (id > 0 && !_skills.Contains(id))
                 {
                     _skipped = true;
@@ -211,7 +175,6 @@ static class HeldSkillRepeater
             var hold = new Hold { Mgr = __instance, Data = skillEnt, Slot = slot, Skill = skill, Repeat = _skills.Contains(skill), Since = Time.realtimeSinceStartup };
             AddHold(hold);
             PressHolds.Add(hold);
-            Debug($"fire slot {slot} skill {skill} selected={_skills.Contains(skill)}");
         }
         catch (Exception e)
         {
@@ -250,20 +213,19 @@ static class HeldSkillRepeater
         {
             if (_repeating)
             {
-                _accepted = true; // our own repeat reached the point where the game takes the skill (debug log only)
                 return;
             }
 
             if (!_active || !_pressInProgress || _lastFire == null) return; // a replay of the game's input cache is no key press
             Report(skillId);
             var key = _lastFire.Pointer.ToInt64();
+            if (SlotOfData.Count > 256) { SlotOfData.Clear(); SkillOfData.Clear(); } // the game makes new skill data now and then: the old pointers are not kept for ever
             SlotOfData[key] = slotId; // learned: the slot of this skill's data and the real skill id of this press
             SkillOfData[key] = skillId;
             var hold = new Hold { Mgr = __instance, Data = _lastFire, Slot = slotId, Skill = skillId, Repeat = _skills.Contains(skillId), Since = Time.realtimeSinceStartup };
             AddHold(hold);
             PressHolds.Clear();
             PressHolds.Add(hold);
-            Debug($"press slot {slotId} skill {skillId} selected={_skills.Contains(skillId)}");
         }
         catch (Exception e)
         {
@@ -275,7 +237,6 @@ static class HeldSkillRepeater
     static void BeforeRelease(int slotId)
     {
         if (_repeating) return;
-        Debug($"release slot {slotId}");
         Held.RemoveAll(hold => hold.Slot == slotId);
     }
 
@@ -313,7 +274,6 @@ static class HeldSkillRepeater
 
         if (!ReferenceEquals(top, _target))
         {
-            Debug($"target slot {top.Slot}");
             _target = top; // another key took over (or the first one starts): its first repeat comes one interval later, as a smooth carry on
             _next = now + _interval / 1000f;
             return;
@@ -325,7 +285,6 @@ static class HeldSkillRepeater
         try
         {
             _skipped = false;
-            _accepted = false;
             if (top.Controller != null && top.Args != null)
             {
                 // a fast clicking: let go, then press again. A key that stays down never lets the game go on to the next step of a skill
@@ -336,7 +295,6 @@ static class HeldSkillRepeater
             }
             else
                 top.Mgr.FirePlaySkillEvent(top.Data, true, false, false);
-            Debug($"repeat slot {top.Slot} accepted={_accepted}{(_skipped ? " (a skill that is not switched on: stopped)" : "")}");
             if (_skipped) top.Repeat = false;
             _failures = 0;
         }
@@ -357,6 +315,6 @@ static class HeldSkillRepeater
         _active = false;
         Stop();
         Plugin.L.LogWarning("skill repeat is off: " + reason);
-        _link?.Send(new Envelope { T = MessageType.Err, Error = "선입력을 껐습니다: " + reason });
+        _link?.Send(new Envelope { T = MessageType.Err, Error = "연속 입력을 껐습니다: " + reason });
     }
 }
