@@ -50,6 +50,7 @@ static class HeldSkillRepeater
     // what is learned from the keys that went through: the slot and the skill id (the game's real one, a combo changes it) of a skill's data object
     static readonly Dictionary<long, int> SlotOfData = new();
     static readonly Dictionary<long, int> SkillOfData = new();
+    static readonly Dictionary<int, int> SkillOfSlot = new(); // the skill a slot had when the game last took a press of it (for a press the game turns down before it looks for the skill)
     static object _pressController; // the controller and the key event of the key down that is being handled
     static object _pressArgs;
     static System.Reflection.MethodInfo _processAttacks;
@@ -77,7 +78,7 @@ static class HeldSkillRepeater
 
         if (_active && !_patched) Patch();
         if (!_active) Stop();
-        foreach (var hold in Held) hold.Repeat = _skills.Contains(hold.Skill); // a switch changes what a held key does at once
+        foreach (var hold in Held) hold.Repeat = hold.Skill > 0 ? _skills.Contains(hold.Skill) : _skills.Count > 0; // a switch changes what a held key does at once
     }
 
     static void Patch()
@@ -125,6 +126,15 @@ static class HeldSkillRepeater
         {
             var slot = __instance.AttackPressIdx;
             var pressing = __instance.IsAttackPress;
+            if (pressing && slot > 0 && PressHolds.Count == 0)
+            {
+                // the game turned the key down before it looked for the skill (e.g. in the air): the key is held all the same, so it is tried again until the game takes it
+                SkillOfSlot.TryGetValue(slot, out var known);
+                var waiting = new Hold { Controller = __instance, Args = _pressArgs, Slot = slot, Skill = known, Repeat = known > 0 ? _skills.Contains(known) : _skills.Count > 0, Since = Time.realtimeSinceStartup }; // a slot never taken before has no known skill: it is tried, and a skill that is not switched on is stopped when the game gives it
+                Held.RemoveAll(other => other.Slot == slot);
+                Held.Add(waiting);
+            }
+
             foreach (var hold in PressHolds.ToArray())
             {
                 if (!pressing || slot <= 0)
@@ -186,7 +196,7 @@ static class HeldSkillRepeater
 
     static void AddHold(Hold hold)
     {
-        Held.RemoveAll(h => ReferenceEquals(h.Data, hold.Data) || h.Data.Pointer == hold.Data.Pointer || (hold.Slot >= 0 && h.Slot == hold.Slot));
+        Held.RemoveAll(h => (h.Data != null && (ReferenceEquals(h.Data, hold.Data) || h.Data.Pointer == hold.Data.Pointer)) || (hold.Slot >= 0 && h.Slot == hold.Slot));
         Held.Add(hold);
     }
 
@@ -220,6 +230,7 @@ static class HeldSkillRepeater
             Report(skillId);
             var key = _lastFire.Pointer.ToInt64();
             if (SlotOfData.Count > 256) { SlotOfData.Clear(); SkillOfData.Clear(); } // the game makes new skill data now and then: the old pointers are not kept for ever
+            SkillOfSlot[slotId] = skillId;
             SlotOfData[key] = slotId; // learned: the slot of this skill's data and the real skill id of this press
             SkillOfData[key] = skillId;
             var hold = new Hold { Mgr = __instance, Data = _lastFire, Slot = slotId, Skill = skillId, Repeat = _skills.Contains(skillId), Since = Time.realtimeSinceStartup };
@@ -281,32 +292,34 @@ static class HeldSkillRepeater
 
         if (now < _next) return;
         _next = now + _interval / 1000f;
+        var current = top;
         _repeating = true;
         try
         {
             _skipped = false;
-            if (top.Controller != null && top.Args != null)
+            if (current.Controller != null && current.Args != null)
             {
                 // a fast clicking: let go, then press again. A key that stays down never lets the game go on to the next step of a skill
                 // (the chase 질풍 찌르기 → 공중 반격), a click does. The press finds the skill of the key as it is now (a derived skill that is gone is not fired).
                 var processAttacks = _processAttacks ??= AccessTools.Method(typeof(PlayerInputController), "processAttacks");
-                processAttacks.Invoke(top.Controller, new[] { top.Args, false });
-                processAttacks.Invoke(top.Controller, new[] { top.Args, true });
+                processAttacks.Invoke(current.Controller, new[] { current.Args, false });
+                processAttacks.Invoke(current.Controller, new[] { current.Args, true });
             }
             else
-                top.Mgr.FirePlaySkillEvent(top.Data, true, false, false);
-            if (_skipped) top.Repeat = false;
+                current.Mgr.FirePlaySkillEvent(current.Data, true, false, false);
+            if (_skipped) current.Repeat = false;
             _failures = 0;
         }
         catch (Exception e)
         {
-            Held.Remove(top);
+            Held.Remove(current);
             if (++_failures >= MaxFailures) Fail("repeat call failed: " + e.Message);
         }
         finally
         {
             _repeating = false;
         }
+
     }
 
     static void Fail(string reason)

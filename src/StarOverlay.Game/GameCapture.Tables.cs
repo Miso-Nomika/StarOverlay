@@ -59,8 +59,6 @@ public sealed partial class GameCapture
     internal static string? LoadedBuffName(int id) => _buffMeta.TryGetValue(id, out var meta) ? meta.Name : null;
 
     static Dictionary<int, string> _skillNames = [];
-    static Dictionary<int, int> _levelOwners = [];
-    static Dictionary<int, string> _ownerHints = [];
     static Dictionary<int, BuffMeta> _buffMeta = [];
     static HashSet<int> _cuisine = [];
     static HashSet<int> _syrup = [];
@@ -100,11 +98,6 @@ public sealed partial class GameCapture
             if (step >= 2 && gameNames.TryGetValue(pair.Key - step + 1, out var first) && first.Length > 0 && first != BasicAttackName)
                 skills.Names[pair.Key] = $"{first}-{step}";
         }
-
-        // a skill level row id without a name of its own stays unnamed (shown as "미확인 <id>"): the name of the skill it belongs to is
-        // only kept as a hint for the list of unknown skills (unknown-skills.json), to be labeled by hand later
-        _levelOwners = ReadSkillLevelOwners(SkillLevelTable);
-        _ownerHints = gameNames;
 
         if (skills.Names.Count > 0)
         {
@@ -617,29 +610,6 @@ public sealed partial class GameCapture
         }
 
         return (map, cuisine, syrup);
-    }
-
-    /// <summary>Skill level row id -> id of its skill.</summary>
-    static Dictionary<int, int> ReadSkillLevelOwners(string path)
-    {
-        var map = new Dictionary<int, int>();
-        if (!File.Exists(path)) return map;
-        try
-        {
-            using var stream = File.OpenRead(path);
-            using var document = JsonDocument.Parse(stream);
-            foreach (var entry in document.RootElement.EnumerateObject())
-            {
-                if (entry.Value.TryGetProperty("Id", out var idElement) && idElement.TryGetInt32(out var id) && id > 0
-                    && entry.Value.TryGetProperty("SkillId", out var skillElement) && skillElement.TryGetInt32(out var skill) && skill > 0)
-                    map[id] = skill;
-            }
-        }
-        catch (Exception)
-        {
-        }
-
-        return map;
     }
 
     static Dictionary<int, double> ReadCooldowns(string path)

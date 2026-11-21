@@ -109,7 +109,10 @@ public sealed record IconView(
     bool Dim,
     int Alpha = 100,
     int TimeAlpha = 100,
-    int StacksAlpha = 100);
+    int StacksAlpha = 100,
+    long OuterEndsAtMs = 0,
+    long OuterTotalMs = 0,
+    int OuterColor = 0);
 
 public sealed record EditFieldView(string Name, string Label, string Value, bool Toggle);
 

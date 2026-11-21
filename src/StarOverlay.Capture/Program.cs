@@ -10,7 +10,7 @@ namespace StarOverlay.Capture;
 /// <summary>
 /// Raw-socket helper: receives the game's TCP packets without Npcap and sends them to the Host through a named pipe.
 /// It needs an administrator token (SIO_RCVALL). It accepts no commands; it ends when the pipe closes or the game exits.
-/// Usage: StarOverlay.Capture --pipe &lt;name&gt; [--pid &lt;game pid&gt;] [--log &lt;file&gt;] [--wait &lt;seconds&gt;]
+/// Usage: StarOverlay.Capture --pipe &lt;name&gt; [--pid &lt;game pid&gt;] [--wait &lt;seconds&gt;]
 /// </summary>
 internal static class Program
 {
@@ -22,11 +22,10 @@ internal static class Program
     const int ExitFailed = 6;
 
     static readonly string[] GameNames = ["StarASIA", "BPSR", "BPSR_STEAM"];
-    static StreamWriter? _log;
 
     static int Main(string[] args)
     {
-        string? pipeName = null, logPath = null;
+        string? pipeName = null;
         int pid = 0, waitSeconds = 60;
         for (var i = 0; i + 1 < args.Length; i += 2)
         {
@@ -34,30 +33,17 @@ internal static class Program
             {
                 case "--pipe": pipeName = args[i + 1]; break;
                 case "--pid": int.TryParse(args[i + 1], out pid); break;
-                case "--log": logPath = args[i + 1]; break;
                 case "--wait": int.TryParse(args[i + 1], out waitSeconds); break;
             }
         }
 
         if (string.IsNullOrWhiteSpace(pipeName)) return ExitUsage;
-        if (!string.IsNullOrWhiteSpace(logPath))
-        {
-            try
-            {
-                _log = new StreamWriter(new FileStream(logPath, FileMode.Create, FileAccess.Write, FileShare.ReadWrite)) { AutoFlush = true };
-            }
-            catch (Exception)
-            {
-            }
-        }
-
         try
         {
             return Run(pipeName, pid, waitSeconds);
         }
         catch (Exception ex)
         {
-            Log("failed: " + ex.GetType().Name + ": " + ex.Message);
             return ExitFailed;
         }
     }
@@ -69,23 +55,18 @@ internal static class Program
 
     static int Run(string pipeName, int pid, int waitSeconds)
     {
-        Log($"start pipe={pipeName} pid={pid}");
         var game = WaitForGame(pid, waitSeconds);
         if (game == null)
         {
-            Log("game process not found");
             return ExitNoGame;
         }
 
-        Log($"game pid={game.Id} ({game.ProcessName})");
         using var pipe = new NamedPipeClientStream(".", pipeName, PipeDirection.Out, PipeOptions.None);
         if (!ConnectPipe(pipe, waitSeconds))
         {
-            Log("pipe server not reachable");
             return ExitNoPipe;
         }
 
-        Log("pipe connected");
         var output = new BufferedStream(pipe, 64 * 1024);
         var tables = new TcpTable();
         var inbound = new HashSet<ulong>();
@@ -149,7 +130,6 @@ internal static class Program
                     nextRefresh = now.AddSeconds(1);
                     if (game.HasExited)
                     {
-                        Log("game exited");
                         return ExitOk;
                     }
 
@@ -161,7 +141,6 @@ internal static class Program
                         socket = OpenRawSocket(wanted);
                         if (socket == null) return ExitNoAccess;
                         localIp = wanted;
-                        Log("raw socket bound to " + new IPAddress(BitConverter.GetBytes(localIp)));
                     }
 
                     inbound.Clear();
@@ -180,7 +159,6 @@ internal static class Program
                     if (now >= nextReport)
                     {
                         nextReport = now.AddSeconds(30);
-                        Log($"sent in={sentIn} out={sentOut} skipped={skipped} connections={inbound.Count}");
                     }
                 }
 
@@ -244,7 +222,6 @@ internal static class Program
         }
         catch (IOException)
         {
-            Log("pipe closed");
             return ExitOk;
         }
         finally
@@ -312,7 +289,6 @@ internal static class Program
         }
         catch (SocketException ex)
         {
-            Log($"raw socket failed ({ex.SocketErrorCode}): {ex.Message}. Run as administrator.");
             return null;
         }
     }
@@ -335,17 +311,6 @@ internal static class Program
         }
 
         return best;
-    }
-
-    static void Log(string text)
-    {
-        try
-        {
-            _log?.WriteLine($"{DateTime.Now:HH:mm:ss} {text}");
-        }
-        catch (Exception)
-        {
-        }
     }
 }
 

@@ -21,6 +21,8 @@ internal sealed class IconStrip
 
     static Sprite _disc;
     static Sprite _ring;
+    static Sprite _outerRing; // the outer half of the ring's width (a combined icon has two rings)
+    static Sprite _innerRing; // the inner half: drawn in a box that is 4% smaller on every side, so it lies just inside the outer one
 
     readonly Transform _parent;
     readonly Action<string> _press;
@@ -99,6 +101,19 @@ internal sealed class IconStrip
         return _ring ??= Make(0.84f);
     }
 
+    // two rings: each is 12% of the radius thick (the single ring is 16%), the outer one from 0.88 to 1.0, the inner one from 0.76 to 0.88
+    const float DualRing = 0.12f;
+
+    static Sprite OuterRing()
+    {
+        return _outerRing ??= Make(1f - DualRing);
+    }
+
+    static Sprite InnerRing()
+    {
+        return _innerRing ??= Make((1f - 2 * DualRing) / (1f - DualRing)); // lies in a box with the radius 0.88, see LayoutRings
+    }
+
     /// <summary>A white circle (inner = 0) or ring with a soft edge; the inner edge is the share of the radius where the ring starts.</summary>
     static Sprite Make(float inner)
     {
@@ -137,6 +152,9 @@ internal sealed class IconStrip
         readonly CanvasGroup _art;
         readonly Image _track;
         readonly Image _gauge;
+        readonly Image _outerTrack;
+        readonly Image _outerGauge;
+        bool _dual; // the icon has two rings: the existing ring then takes the inner half of its width
         readonly Image _face;
         readonly Image _picture;
         readonly TextMeshProUGUI _letter;
@@ -162,6 +180,18 @@ internal sealed class IconStrip
             UiKit.Stretch(art);
             _art = art.AddComponent<CanvasGroup>();
             _art.blocksRaycasts = false;
+            _outerTrack = UiKit.Box("OuterTrack", art.transform, new Color(1f, 1f, 1f, 0.22f));
+            _outerTrack.sprite = OuterRing();
+            UiKit.Stretch(_outerTrack.gameObject);
+            _outerGauge = UiKit.Box("OuterGauge", art.transform, Color.white);
+            _outerGauge.sprite = OuterRing();
+            _outerGauge.type = Image.Type.Filled;
+            _outerGauge.fillMethod = Image.FillMethod.Radial360;
+            _outerGauge.fillOrigin = 2;
+            _outerGauge.fillClockwise = false;
+            UiKit.Stretch(_outerGauge.gameObject);
+            _outerTrack.gameObject.SetActive(false);
+            _outerGauge.gameObject.SetActive(false);
             _track = UiKit.Box("Track", art.transform, new Color(1f, 1f, 1f, 0.22f));
             _track.sprite = Ring();
             UiKit.Stretch(_track.gameObject);
@@ -221,19 +251,28 @@ internal sealed class IconStrip
                 UiKit.Place(_state.gameObject, end - StateWidth, 0, StateWidth, size);
                 UiKit.Place(_removeButton, width - 6 - RemoveSize, (size - RemoveSize) / 2, RemoveSize, RemoveSize);
                 _name.fontSize = (float)Math.Max(12, size * 0.42);
-                _state.fontSize = (float)Math.Max(11, size * 0.36);
+                _state.fontSize = (float)Math.Max(11, size * 0.32);
             }
 
-            var inset = (float)(size * 0.08);
-            UiKit.Stretch(_face.gameObject, inset, inset, inset, inset);
+            LayoutRings();
             UiKit.Stretch(_center.gameObject);
             UiKit.Place(_corner.gameObject, 0, 0, size - 2, size - 1);
             _center.fontSize = (float)(size * 0.36);
-            _corner.fontSize = (float)(size * 0.28);
+            _corner.fontSize = (float)(size * 0.36);
             _letter.fontSize = (float)(size * 0.45);
         }
 
         const double StateWidth = 44;
+
+        /// <summary>One ring: the whole width. Two rings: the existing one on the inner half (a smaller box with the inner ring picture), the outer one on the outer half.</summary>
+        void LayoutRings()
+        {
+            var ring = _dual ? (float)(_size * DualRing / 2) : 0f; // the box of the inner ring is smaller by the width of the outer one
+            UiKit.Stretch(_track.gameObject, ring, ring, ring, ring);
+            UiKit.Stretch(_gauge.gameObject, ring, ring, ring, ring);
+            var face = (float)(_size * (_dual ? DualRing : 0.08)); // the picture stays inside the rings
+            UiKit.Stretch(_face.gameObject, face, face, face, face);
+        }
 
         public void Bind(IconDto icon, bool list, bool removable)
         {
@@ -257,6 +296,16 @@ internal sealed class IconStrip
             _letter.gameObject.SetActive(sprite == null);
             UiKit.SetText(_letter, icon.Name.Length == 0 ? "" : icon.Name.Substring(0, 1));
             _gauge.color = UiKit.Rgb(icon.Color == 0 ? 0x4FC3F7 : icon.Color);
+            var dual = icon.OuterColor != 0;
+            if (dual != _dual || _track.sprite == null)
+            {
+                _dual = dual;
+                _track.sprite = dual ? InnerRing() : Ring();
+                _gauge.sprite = dual ? InnerRing() : Ring();
+                LayoutRings();
+            }
+
+            _outerGauge.color = UiKit.Rgb(icon.OuterColor);
             _art.alpha = Math.Clamp(icon.Alpha, 0, 100) / 100f; // the picture, its ring and its track: see-through on their own, the texts keep theirs
             _center.alpha = Math.Clamp(icon.TimeAlpha, 0, 100) / 100f; // the time and the stacks are drawn at their own opacity
             _corner.alpha = Math.Clamp(icon.StacksAlpha, 0, 100) / 100f;
@@ -280,13 +329,24 @@ internal sealed class IconStrip
             var gauge = icon.Gauge;
             var show = gauge is "ring" or "ring-reverse";
             _track.gameObject.SetActive(show);
-            _gauge.gameObject.SetActive(show && !icon.Dim);
+            _outerTrack.gameObject.SetActive(show && _dual);
+            // a ring with nothing to count (its buff is not there) is only its track when the icon has two rings; with one ring it is full while the buff is there
+            var inner = !(_dual && icon.EndsAtMs <= 0);
+            var outer = _dual && icon.OuterEndsAtMs > 0;
+            _gauge.gameObject.SetActive(show && !icon.Dim && inner);
+            _outerGauge.gameObject.SetActive(show && !icon.Dim && outer);
             if (!show || icon.Dim) return;
+            if (inner) Fill(_gauge, icon.EndsAtMs, icon.TotalMs, gauge, nowMs);
+            if (outer) Fill(_outerGauge, icon.OuterEndsAtMs, icon.OuterTotalMs, gauge, nowMs);
+        }
+
+        static void Fill(Image ring, long endsAtMs, long totalMs, string gauge, long nowMs)
+        {
             float share;
-            if (icon.EndsAtMs > 0 && icon.TotalMs > 0) share = Mathf.Clamp01((float)((icon.EndsAtMs - nowMs) / (double)icon.TotalMs));
-            else share = icon.EndsAtMs > 0 ? 0f : 1f; // no duration: a full ring while the buff is there
+            if (endsAtMs > 0 && totalMs > 0) share = Mathf.Clamp01((float)((endsAtMs - nowMs) / (double)totalMs));
+            else share = endsAtMs > 0 ? 0f : 1f; // no duration: a full ring while the buff is there
             var fill = gauge == "ring-reverse" ? 1f - share : share;
-            if (Mathf.Abs(_gauge.fillAmount - fill) > 0.004f) _gauge.fillAmount = fill; // a change redraws the canvas: only when it is visible
+            if (Mathf.Abs(ring.fillAmount - fill) > 0.004f) ring.fillAmount = fill; // a change redraws the canvas: only when it is visible
         }
 
         static string Format(double seconds)

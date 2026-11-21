@@ -33,7 +33,6 @@ public sealed partial class GameCapture
         PublishLocation();
         if ((DateTime.UtcNow - _statusAt).TotalSeconds < 1) return;
         _statusAt = DateTime.UtcNow;
-        FlushUnknownSkills();
 
         var packets = _cap?.NumSeenPackets ?? 0;
         var messages = _cap?.NumGameMessagesSeen ?? 0;
@@ -42,20 +41,6 @@ public sealed partial class GameCapture
         if (reassembler != null) text += $" / 연결 시작부터 {reassembler.NumSyncedFromStart} 중간부터 {reassembler.NumSyncedByShape} 동기화 전 버림 {reassembler.NumUnsyncedDrops}";
         if (_errors > 0 && _lastError.Length > 0) text += " / " + _lastError;
         LiveCombat.SetNote(text);
-        WriteStatus($"{_device} / {text}");
-    }
-
-    void WriteStatus(string text)
-    {
-        try
-        {
-            var folder = Path.Combine(_game, "bpsr", "state");
-            Directory.CreateDirectory(folder);
-            File.WriteAllText(Path.Combine(folder, "capture.txt"), text, new UTF8Encoding(false));
-        }
-        catch (Exception)
-        {
-        }
     }
 
 }

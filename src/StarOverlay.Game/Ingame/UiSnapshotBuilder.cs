@@ -137,6 +137,9 @@ public sealed class UiSnapshotBuilder(IIngameHooks hooks, LayoutStore layouts)
                         Alpha = icon.Alpha,
                         TimeAlpha = icon.TimeAlpha,
                         StacksAlpha = icon.StacksAlpha,
+                        OuterEndsAtMs = icon.OuterEndsAtMs,
+                        OuterTotalMs = icon.OuterTotalMs,
+                        OuterColor = icon.OuterColor,
                     });
                 window.Widgets.Add(widget);
             }

@@ -35,11 +35,8 @@ public sealed class IngameService : IDisposable
     Thread? _accept;
     Thread? _ticker;
 
-    readonly IngameLog _log;
-
-    public IngameService(IIngameHooks hooks, string pipeName, string layoutPath, string? assetsRoot = null, string? logPath = null)
+    public IngameService(IIngameHooks hooks, string pipeName, string layoutPath, string? assetsRoot = null)
     {
-        _log = new IngameLog(logPath);
         _hooks = hooks;
         _pipeName = pipeName;
         _layouts = new LayoutStore(layoutPath);
@@ -85,7 +82,6 @@ public sealed class IngameService : IDisposable
 
     public void Start()
     {
-        _log.Write($"service starts, pipe {_pipeName}");
         _accept = new Thread(AcceptLoop) { IsBackground = true, Name = "ingame-accept" };
         _accept.Start();
         _ticker = new Thread(TickLoop) { IsBackground = true, Name = "ingame-ticker" };
@@ -137,7 +133,6 @@ public sealed class IngameService : IDisposable
             }
             catch (Exception ex)
             {
-                _log.Write("accept/serve failed: " + ex.GetType().Name + ": " + ex.Message);
                 if (!_stop.IsCancellationRequested) Thread.Sleep(500);
             }
             finally
@@ -163,7 +158,6 @@ public sealed class IngameService : IDisposable
         }
 
         ConnectionsAccepted++;
-        _log.Write($"agent connected (#{ConnectionsAccepted})");
         AgentConnected?.Invoke();
         Send(new Envelope { T = MessageType.Hello, V = Protocol.Version });
         if (AssetsRoot is not null) Send(new Envelope { T = MessageType.Assets, Root = AssetsRoot });
@@ -179,7 +173,6 @@ public sealed class IngameService : IDisposable
             var message = ProtocolJson.Read(line);
             if (message is null)
             {
-                _log.Write("unreadable line from agent: " + line[..Math.Min(80, line.Length)]);
                 continue;
             }
 
@@ -190,7 +183,6 @@ public sealed class IngameService : IDisposable
             catch (Exception ex)
             {
                 AgentErrors = "명령 처리 오류: " + ex.Message;
-                _log.Write("command failed: " + ex);
             }
         }
     }
@@ -214,7 +206,6 @@ public sealed class IngameService : IDisposable
 
         if (was)
         {
-            _log.Write("agent disconnected");
             lock (_settingsShown)
             {
                 _settingsShown.Clear();
@@ -241,7 +232,6 @@ public sealed class IngameService : IDisposable
                 if (_lastTickError != ex.Message)
                 {
                     _lastTickError = ex.Message;
-                    _log.Write("snapshot failed: " + ex);
                 }
             }
         }
@@ -297,8 +287,7 @@ public sealed class IngameService : IDisposable
                 AgentErrors = message.Error ?? "";
                 break;
             case MessageType.TablesDone:
-                if (!string.IsNullOrEmpty(message.Error)) _log.Write("agent could not save the game tables: " + message.Error);
-                else if (message.Written == true) TablesWritten?.Invoke();
+                if (message.Written == true) TablesWritten?.Invoke();
                 break;
             case MessageType.Msg when message.Msg is not null:
                 NetMessage?.Invoke(message.Msg);

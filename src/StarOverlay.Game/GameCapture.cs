@@ -116,11 +116,9 @@ public sealed partial class GameCapture : IDisposable
                         if (monster.Dead) FinishBoss(monster);
                 }
             });
-            WriteStatus("게임 통신을 받는 중입니다.");
         }
         catch (Exception ex)
         {
-            WriteStatus("게임 통신 수신 실패: 수신 설정(관리자 확인 1회)을 마친 뒤 게임을 다시 켜세요. " + ex.Message);
         }
     }
 

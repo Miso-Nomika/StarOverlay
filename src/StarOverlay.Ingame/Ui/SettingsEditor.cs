@@ -93,6 +93,8 @@ internal sealed partial class SettingsView
         Keypad(editor, split, lower, bw - split, lowerH);
     }
 
+    const int ShortValue = 6; // the longest value shown on a field button (a longer picture name ends with "…")
+
     void EditorRow(Transform parent, WidgetDto editor, EditRowDto row, double y, double bw, bool canUp, bool canDown)
     {
         var back = UiKit.Box("Edit_" + row.Key, parent, Row);
@@ -103,11 +105,11 @@ internal sealed partial class SettingsView
         {
             right -= width;
             Btn(back.transform, caption, right, 4, width, EditRowHeight - 10, color, click);
-            right -= 3;
+            right -= 2;
             return right;
         }
 
-        Put("삭제", 42, ButtonWarn, () => Edit(editor, row.Key, "delete"));
+        Put("삭제", 38, ButtonWarn, () => Edit(editor, row.Key, "delete"));
         Put("▼", 26, canDown ? Button : new Color(0.16f, 0.19f, 0.25f, 1f), () => { if (canDown) Edit(editor, row.Key, "down"); });
         Put("▲", 26, canUp ? Button : new Color(0.16f, 0.19f, 0.25f, 1f), () => { if (canUp) Edit(editor, row.Key, "up"); });
         for (var f = row.Fields.Count - 1; f >= 0; f--)
@@ -115,11 +117,20 @@ internal sealed partial class SettingsView
             var field = row.Fields[f];
             var name = field.Name;
             if (field.Name == "image")
-                Put(field.Label + " " + field.Value, 30 + (field.Label.Length + Math.Min(18, field.Value.Length)) * 13, Button, () => OpenPicker(row.Key));
+            {
+                var shown = field.Value.Length > ShortValue ? field.Value.Substring(0, ShortValue - 1) + "…" : field.Value; // a long picture name would make the button wide
+                Put(field.Label + " " + shown, 12 + (field.Label.Length + 1 + shown.Length) * 13, Button, () => OpenPicker(row.Key));
+            }
             else if (field.Toggle)
-                Put((field.Value == "on" ? "V " : "") + field.Label, 20 + field.Label.Length * 14, field.Value == "on" ? ButtonOn : Button, () => Edit(editor, row.Key, "field:" + name));
+            {
+                var caption = (field.Value == "on" ? "V " : "") + field.Label;
+                Put(caption, 12 + caption.Length * 13, field.Value == "on" ? ButtonOn : Button, () => Edit(editor, row.Key, "field:" + name));
+            }
             else
-                Put(field.Label + " " + field.Value, 30 + (field.Label.Length + field.Value.Length) * 13, Button, () => Edit(editor, row.Key, "field:" + name));
+            {
+                var caption = field.Label + " " + field.Value;
+                Put(caption, 12 + caption.Length * 13, Button, () => Edit(editor, row.Key, "field:" + name));
+            }
         }
 
         Text(back.transform, Esc(row.Name), EditRowHeight, 0, Math.Max(20, right - EditRowHeight), EditRowHeight - 2, 14, Color.white);

@@ -150,7 +150,6 @@ public sealed partial class GameCapture
 
         skill.Damage += amount;
         skill.Hits++;
-        if (!_skillNames.ContainsKey(hit.OwnerId)) NoteUnknownSkill(hit.OwnerId, fighter, amount);
         _hits++;
         NoteHit(attacker);
         if (hit.IsCrit || (hit.TypeFlag & 1) == 1) skill.Crits++;

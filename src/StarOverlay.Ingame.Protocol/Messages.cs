@@ -260,6 +260,13 @@ public sealed class IconDto
 
     public int Color { get; set; }
 
+    /// <summary>A second, outer ring (the other time of a combined icon): when it ends and its whole length, like <see cref="EndsAtMs"/>; <see cref="OuterColor"/> is 0 when the icon has no outer ring.</summary>
+    public long OuterEndsAtMs { get; set; }
+
+    public long OuterTotalMs { get; set; }
+
+    public int OuterColor { get; set; }
+
     public bool Dim { get; set; }
 
     /// <summary>How opaque the whole icon is (percent); the time and the stacks have their own.</summary>

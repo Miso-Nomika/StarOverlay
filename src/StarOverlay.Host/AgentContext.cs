@@ -45,9 +45,7 @@ internal sealed class AgentContext : ApplicationContext, IIngameHooks
         _capture.Start();
 
         var config = Path.Combine(ModLayout.Root(home), "config");
-        // the service log (connections, errors) is written only when asked for (environment variable STAROVERLAY_LOG=1): it is a diagnostic
-        var logs = Environment.GetEnvironmentVariable("STAROVERLAY_LOG") == "1" ? Path.Combine(home, "logs", "ingame-service.log") : null;
-        _service = new IngameService(this, IngameService.DefaultPipeName(), Path.Combine(config, "ingame-layout.json"), ModLayout.PluginsDirectory(home), logs)
+        _service = new IngameService(this, IngameService.DefaultPipeName(), Path.Combine(config, "ingame-layout.json"), ModLayout.PluginsDirectory(home))
         {
             TablesRoot = Path.Combine(home, "tables"), // the same folder GameCapture reads first
         };

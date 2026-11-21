@@ -22,6 +22,12 @@ public sealed class TrackedBuff
     [JsonPropertyName("color")] public string Color { get; set; } = "#4FC3F7";
 
     [JsonPropertyName("hide")] public bool Hide { get; set; }
+
+    /// <summary>A second buff the time comes from (0: none). The stacks stay those of <see cref="Uid"/>: e.g. 몽환의 화살 중첩 (3002411) with the time of its built-in cooldown (3002412).</summary>
+    [JsonPropertyName("timeUid")] public int TimeUid { get; set; }
+
+    /// <summary>A third buff the outer ring comes from (0: none): the time until the stacks are reset, e.g. 3002413. The inner ring and the number in the middle are those of <see cref="TimeUid"/>.</summary>
+    [JsonPropertyName("resetUid")] public int ResetUid { get; set; }
 }
 
 /// <summary>The data side of the buff tracker: the stored list, the edits of the editor widget, and the views for both widgets.</summary>
@@ -51,6 +57,8 @@ public sealed class TrackerModel(Func<string?> read, Action<string> write, strin
     ];
 
     readonly Dictionary<int, (LiveBuff Buff, long Seen)> _seen = [];
+    readonly Dictionary<int, (int Stacks, long Seen)> _lastStacks = []; // the stacks a buff showed when it was last seen (a combined icon keeps them while only the time buff is there)
+    const long StacksSlackMs = 1000;
     readonly object _lock = new();
 
     List<TrackedBuff> Load()
@@ -76,7 +84,11 @@ public sealed class TrackerModel(Func<string?> read, Action<string> write, strin
         var now = nowMs();
         lock (_lock)
         {
-            foreach (var buff in own) _seen[buff.Id] = (buff, now);
+            foreach (var buff in own)
+            {
+                _seen[buff.Id] = (buff, now);
+                if (buff.Stacks > 0) _lastStacks[buff.Id] = (buff.Stacks, now);
+            }
         }
     }
 
@@ -102,7 +114,7 @@ public sealed class TrackerModel(Func<string?> read, Action<string> write, strin
                     (items[index + 1], items[index]) = (items[index], items[index + 1]);
                     break;
                 case "field" when index >= 0:
-                    Field(items[index], op.Value);
+                    Field(items[index], op.Value, items.Select(i => i.Uid).ToArray());
                     break;
                 case "set" when index >= 0 && SetImage(items[index], op.Value):
                     break;
@@ -114,7 +126,17 @@ public sealed class TrackerModel(Func<string?> read, Action<string> write, strin
         }
     }
 
-    void Field(TrackedBuff item, string field)
+    /// <summary>none, then the other tracked buffs in the list order, then none again; the current value stays in the round even when its row was deleted.</summary>
+    static int NextUid(TrackedBuff item, int current, IEnumerable<int> others)
+    {
+        var choices = new List<int> { 0 };
+        choices.AddRange(others.Where(uid => uid != item.Uid));
+        if (current > 0 && !choices.Contains(current)) choices.Add(current);
+        var at = choices.IndexOf(current);
+        return choices[(at + 1) % choices.Count];
+    }
+
+    void Field(TrackedBuff item, string field, IReadOnlyList<int> others)
     {
         switch (field)
         {
@@ -126,6 +148,12 @@ public sealed class TrackerModel(Func<string?> read, Action<string> write, strin
                 break;
             case "gauge":
                 item.Gauge = Next(Gauges, item.Gauge);
+                break;
+            case "timeUid":
+                item.TimeUid = NextUid(item, item.TimeUid, others);
+                break;
+            case "resetUid":
+                item.ResetUid = NextUid(item, item.ResetUid, others);
                 break;
             case "color":
                 item.Color = Next(Colors.Select(c => c.Hex).ToArray(), item.Color);
@@ -193,13 +221,15 @@ public sealed class TrackerModel(Func<string?> read, Action<string> write, strin
         {
             return Load().Select(item => new EditRowView(
                 item.Uid.ToString(),
-                $"{NameOf(item.Uid)} ({item.Uid})",
+                $"{NameOf(item.Uid)} ({item.Uid})" + (item.TimeUid > 0 ? $" + 시간 {item.TimeUid}" : "") + (item.ResetUid > 0 ? $" + 초기화 {item.ResetUid}" : ""),
                 ImagePath(item),
                 [
                     new EditFieldView("time", "시간", item.Time ? "on" : "off", true),
                     new EditFieldView("stacks", "중첩", item.Stacks ? "on" : "off", true),
-                    new EditFieldView("image", "이미지", ImageLabel(item), false),
-                    new EditFieldView("gauge", "게이지", GaugeLabel(item.Gauge), false),
+                    new EditFieldView("timeUid", "조합", item.TimeUid > 0 ? item.TimeUid.ToString() : "없음", false),
+                    new EditFieldView("resetUid", "초기화", item.ResetUid > 0 ? item.ResetUid.ToString() : "없음", false),
+                    new EditFieldView("image", "그림", ImageLabel(item), false),
+                    new EditFieldView("gauge", "링", GaugeLabel(item.Gauge), false),
                     new EditFieldView("color", "색", Colors.FirstOrDefault(c => c.Hex == item.Color.ToUpperInvariant()).Name ?? item.Color, false),
                 ])).ToArray();
         }
@@ -226,6 +256,72 @@ public sealed class TrackerModel(Func<string?> read, Action<string> write, strin
         }
     }
 
+    /// <summary>The colour chosen for a buff's own row (the row stays in the list while it is used by a combination); the colour of the combined icon's own row when it has none.</summary>
+    static int ColorOf(IReadOnlyList<TrackedBuff> items, int uid, TrackedBuff fallback)
+    {
+        var source = uid > 0 ? items.FirstOrDefault(i => i.Uid == uid) : null;
+        return Rgb((source ?? fallback).Color);
+    }
+
+    /// <summary>The end and the whole length (ms) of a buff on this PC's clock: the length the game sent, or the buff table's when none came.</summary>
+    static (long Ends, long Total) Span(LiveBuff buff, int uid) =>
+        (buff.EndsAtMs, (long)Math.Round((buff.Duration > 0 ? buff.Duration : BuffBook.Find(uid)?.Duration ?? 0) * 1000));
+
+    /// <summary>
+    /// An icon whose stacks come from the tracked buff, whose inner ring and number in the middle come from the time buff and whose outer ring comes from the
+    /// reset buff; each ring is drawn in the colour chosen for the row of its buff. It is on while any of the three is there. The tracked buff may be gone after a second (its table duration says 30), so when only the others are
+    /// there the stacks it showed when it was last seen are kept, if that was after the first of them began (a second earlier is allowed). When a reset buff is
+    /// chosen and it is gone (the game has reset the stacks) no stacks are shown.
+    /// </summary>
+    IconView Combined(IReadOnlyList<TrackedBuff> items, TrackedBuff item, LiveBuff? stackBuff, LiveBuff? timeBuff, LiveBuff? resetBuff, int timeAlpha, int stacksAlpha)
+    {
+        var image = ImagePath(item);
+        var gauge = Gauges.Contains(item.Gauge) ? item.Gauge : "ring";
+        var innerColor = item.TimeUid > 0 ? ColorOf(items, item.TimeUid, item) : Rgb(item.Color); // each ring has the colour chosen for its own buff
+        var outerColor = item.ResetUid > 0 ? Math.Max(1, ColorOf(items, item.ResetUid, item)) : 0; // 0 means "no outer ring"
+        if (stackBuff == null && timeBuff == null && resetBuff == null)
+            return new IconView(item.Uid.ToString(), NameOf(item.Uid), image, "", "", 0, 0, false, gauge, innerColor, true, Percent(AbsentOpacity, 40), timeAlpha, stacksAlpha, 0, 0, outerColor);
+
+        long ends = 0, total = 0, outerEnds = 0, outerTotal = 0;
+        long earliestStart = long.MaxValue;
+        if (timeBuff != null)
+        {
+            (ends, total) = Span(timeBuff, item.TimeUid);
+            if (ends > 0 && total > 0) earliestStart = Math.Min(earliestStart, ends - total);
+        }
+
+        if (resetBuff != null)
+        {
+            (outerEnds, outerTotal) = Span(resetBuff, item.ResetUid);
+            if (outerEnds > 0 && outerTotal > 0) earliestStart = Math.Min(earliestStart, outerEnds - outerTotal);
+        }
+
+        var stacks = stackBuff?.Stacks ?? 0;
+        var reset = item.ResetUid > 0 && resetBuff == null; // the reset buff ran out: the stacks are zero again
+        if (stacks <= 0 && !reset && (timeBuff != null || resetBuff != null) && _lastStacks.TryGetValue(item.Uid, out var last)
+            && (earliestStart == long.MaxValue || last.Seen >= earliestStart - StacksSlackMs))
+            stacks = last.Stacks;
+
+        return new IconView(
+            item.Uid.ToString(),
+            NameOf(item.Uid),
+            image,
+            "",
+            item.Stacks && stacks > 0 ? stacks.ToString() : "",
+            ends,
+            total,
+            item.Time && ends > 0,
+            gauge,
+            innerColor,
+            false,
+            Percent(PresentOpacity, 100),
+            timeAlpha,
+            stacksAlpha,
+            outerEnds,
+            outerTotal,
+            outerColor);
+    }
+
     public IReadOnlyList<IconView> Icons(IReadOnlyList<LiveBuff> own)
     {
         List<TrackedBuff> items;
@@ -233,10 +329,18 @@ public sealed class TrackerModel(Func<string?> read, Action<string> write, strin
         var views = new List<IconView>();
         var timeAlpha = Percent(TimeOpacity, 100);
         var stacksAlpha = Percent(StacksOpacity, 100);
-        foreach (var item in items.Where(i => !i.Hide))
+        var partOfAnother = items.Where(i => !i.Hide).SelectMany(i => new[] { i.TimeUid, i.ResetUid }).Where(uid => uid > 0).ToHashSet(); // a buff used by a combination has no icon of its own
+        foreach (var item in items.Where(i => !i.Hide && !partOfAnother.Contains(i.Uid)))
         {
             var present = own.Where(b => b.Id == item.Uid).OrderByDescending(b => b.Stacks).ThenByDescending(b => b.EndsAtMs).FirstOrDefault();
             var entry = BuffBook.Find(item.Uid);
+            if (item.TimeUid > 0 || item.ResetUid > 0)
+            {
+                LiveBuff? Latest(int uid) => uid > 0 ? own.Where(b => b.Id == uid).OrderByDescending(b => b.EndsAtMs).FirstOrDefault() : null;
+                views.Add(Combined(items, item, present, Latest(item.TimeUid), Latest(item.ResetUid), timeAlpha, stacksAlpha));
+                continue;
+            }
+
             var image = ImagePath(item);
             var gauge = Gauges.Contains(item.Gauge) ? item.Gauge : "ring";
             if (present == null)

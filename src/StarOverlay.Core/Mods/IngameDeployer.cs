@@ -187,7 +187,7 @@ public static class IngameDeployer
             if (Directory.Exists(unityLibs)) Copy(unityLibs, Path.Combine(game, LoaderFolder, "unity-libs"), game, manifest);
 
             WriteText(Path.Combine(game, LoaderFolder, "config", "StarOverlay.cfg.note"), "Written by Star Overlay.\n", game, manifest);
-            WriteText(Path.Combine(game, LoaderFolder, "config", "BepInEx.cfg"), "[Logging.Console]\nEnabled = false\n\n[Logging.Disk]\nEnabled = true\nWriteUnityLog = false\n", game, manifest);
+            WriteText(Path.Combine(game, LoaderFolder, "config", "BepInEx.cfg"), "[Logging.Console]\nEnabled = false\n\n[Logging.Disk]\nEnabled = false\nWriteUnityLog = false\n", game, manifest);
             WriteText(ServicePath(game), JsonSerializer.Serialize(new { host = hostExe, package = manifest.PackageId }, Json), game, manifest);
             foreach (var directory in created) manifest.Directories.Add(directory);
             File.WriteAllText(ManifestPath(game), JsonSerializer.Serialize(manifest, Json));
