@@ -4,7 +4,7 @@
 #   ingame\   BepInEx loader + our in-game agent + font + icons + Unity libraries
 #   plugins\  the standard plugins (dps.meter, chat, party.join, buff.tracker)
 # Needs: the game's interop assemblies in artifacts\ingame-refs (build\collect-interop.ps1 on a PC with the game, once).
-param([string]$Version = '0.4.5')
+param([string]$Version = '0.4.6')
 $ErrorActionPreference = 'Stop'
 $userDotnet = Join-Path $env:USERPROFILE '.dotnet'
 if (Test-Path (Join-Path $userDotnet 'dotnet.exe')) { $env:PATH = "$userDotnet;$env:PATH"; $env:DOTNET_ROOT = $userDotnet } # a per-user SDK wins over a runtime-only install
@@ -39,7 +39,8 @@ $plugins = @(
     @{ Id = 'dps.meter'; Project = 'StarOverlay.DpsMeter'; Assets = 'samples\StarOverlay.DpsMeter\assets' },
     @{ Id = 'chat'; Project = 'StarOverlay.Chat'; Assets = $null },
     @{ Id = 'party.join'; Project = 'StarOverlay.PartyJoin'; Assets = $null },
-    @{ Id = 'buff.tracker'; Project = 'StarOverlay.BuffTracker'; Assets = $null }
+    @{ Id = 'buff.tracker'; Project = 'StarOverlay.BuffTracker'; Assets = $null },
+    @{ Id = 'skill.repeat'; Project = 'StarOverlay.SkillRepeat'; Assets = $null }
 )
 foreach ($plugin in $plugins) {
     $out = Join-Path $art ('plugin-build\' + $plugin.Project)

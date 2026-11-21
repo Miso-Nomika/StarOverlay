@@ -4,7 +4,7 @@ namespace StarOverlay.Chat;
 
 public sealed class ChatPlugin : IPlugin
 {
-    public PluginInfo Info { get; } = new("chat", "채팅", "0.4.5");
+    public PluginInfo Info { get; } = new("chat", "채팅", "0.4.6");
 
     public void Load(IPluginContext context)
     {

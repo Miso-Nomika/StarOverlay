@@ -22,7 +22,7 @@ static class TableDump
 
     static readonly Spec[] Specs =
     [
-        new("SkillTable", ["Id", "Name", "SlotPositionId", "Icon"]),
+        new("SkillTable", ["Id", "Name", "SlotPositionId", "Icon", "SkillLevelGroup", "SkySkillId", "NextSkillId", "SwitchSkillId"]),
         new("BuffTable", ["Id", "Name", "NameDesign", "Desc", "SkillId", "BuffAbilityType", "DestroyParam"]),
         new("SkillFightLevelTable", ["Id", "SkillId", "PVECoolTime"]),
         new("SceneTable", ["Id", "Name"]),

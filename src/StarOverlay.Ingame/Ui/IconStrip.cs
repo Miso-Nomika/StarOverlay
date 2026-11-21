@@ -15,6 +15,7 @@ namespace StarOverlay.Ingame.Ui;
 internal sealed class IconStrip
 {
     const int DefaultSize = 48;
+    const int ListIconSize = 36;
     const float Gap = 6f;
     const int Texels = 128;
 
@@ -22,29 +23,51 @@ internal sealed class IconStrip
     static Sprite _ring;
 
     readonly Transform _parent;
+    readonly Action<string> _press;
+    readonly Action<string> _remove;
+    readonly UiRoot _ui;
     readonly List<Cell> _cells = new();
     List<IconDto> _icons = new();
+    int _first;  // the first icon that is drawn (a list that is scrolled)
+    int _shown;  // how many icons are drawn from there
 
-    public IconStrip(Transform parent) => _parent = parent;
+    /// <param name="press">Called with the key of a row that was pressed (only a pressable list has such rows).</param>
+    public IconStrip(Transform parent, Action<string> press = null, Action<string> remove = null, UiRoot ui = null)
+    {
+        _parent = parent;
+        _press = press;
+        _remove = remove;
+        _ui = ui;
+    }
 
-    /// <summary>Lays the icons out from (0, y) in the width given; returns the height used.</summary>
-    public double Apply(WidgetDto widget, double y, double width)
+    /// <summary>The size of the picture of a row of a pressable list and the distance from one row to the next.</summary>
+    public static (double Size, double Step) ListMetrics(WidgetDto widget)
+    {
+        var size = widget.IconSize > 0 ? widget.IconSize : ListIconSize;
+        return (size, size + Gap);
+    }
+
+    /// <summary>Lays the icons out from (0, y) in the width given; returns the height used. A list can show only <paramref name="count"/> rows from the row <paramref name="first"/> on.</summary>
+    public double Apply(WidgetDto widget, double y, double width, int first = 0, int count = int.MaxValue)
     {
         _icons = widget.Icons;
-        var size = widget.IconSize > 0 ? widget.IconSize : DefaultSize;
-        var perRow = widget.IconsVertical ? 1 : Math.Max(1, (int)((width + Gap) / (size + Gap)));
-        for (var i = 0; i < _icons.Count; i++)
+        _first = Math.Clamp(first, 0, _icons.Count);
+        _shown = Math.Min(count, _icons.Count - _first);
+        var list = widget.IconsClickable; // a pressable list: one wide row per icon with its name and on/off
+        var size = widget.IconSize > 0 ? widget.IconSize : list ? ListIconSize : DefaultSize;
+        var perRow = list || widget.IconsVertical ? 1 : Math.Max(1, (int)((width + Gap) / (size + Gap)));
+        for (var i = 0; i < _shown; i++)
         {
-            while (_cells.Count <= i) _cells.Add(new Cell(_parent));
+            while (_cells.Count <= i) _cells.Add(new Cell(_parent, _press, _remove, _ui));
             var x = i % perRow * (size + Gap);
             var top = y + i / perRow * (size + Gap);
-            _cells[i].Place(x, top, size);
-            _cells[i].Bind(_icons[i]);
+            _cells[i].Place(x, top, size, list ? width : 0, list && widget.IconsRemovable);
+            _cells[i].Bind(_icons[_first + i], list, list && widget.IconsRemovable);
         }
 
-        for (var i = _icons.Count; i < _cells.Count; i++) _cells[i].Hide();
+        for (var i = _shown; i < _cells.Count; i++) _cells[i].Hide();
         Tick();
-        var rows = _icons.Count == 0 ? 0 : (_icons.Count - 1) / perRow + 1;
+        var rows = _shown == 0 ? 0 : (_shown - 1) / perRow + 1;
         return rows * (size + Gap);
     }
 
@@ -52,15 +75,17 @@ internal sealed class IconStrip
     {
         foreach (var cell in _cells) cell.Hide();
         _icons = new List<IconDto>();
+        _first = 0;
+        _shown = 0;
     }
 
     /// <summary>Every frame: the gauges and the time texts (a text is written only when its second changes).</summary>
     public void Tick()
     {
         var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-        for (var i = 0; i < _icons.Count && i < _cells.Count; i++)
+        for (var i = 0; i < _shown && i < _cells.Count && _first + i < _icons.Count; i++)
         {
-            _cells[i].Tick(_icons[i], now);
+            _cells[i].Tick(_icons[_first + i], now);
         }
     }
 
@@ -101,6 +126,13 @@ internal sealed class IconStrip
     sealed class Cell
     {
         readonly GameObject _root;
+        readonly GameObject _box;   // the square with the picture, the ring and the texts (the whole cell in a row of icons)
+        readonly GameObject _hit;   // the row of a pressable list
+        readonly Image _hitBack;
+        readonly TextMeshProUGUI _name;
+        readonly TextMeshProUGUI _state;
+        readonly GameObject _removeButton;
+        string _key = "";
         readonly CanvasGroup _group;
         readonly CanvasGroup _art;
         readonly Image _track;
@@ -113,12 +145,20 @@ internal sealed class IconStrip
         double _size;
         string _lastCenter = "";
 
-        public Cell(Transform parent)
+        public Cell(Transform parent, Action<string> press, Action<string> remove, UiRoot ui)
         {
             _root = UiKit.Node("Icon", parent);
             _group = _root.AddComponent<CanvasGroup>();
             _group.blocksRaycasts = false;
-            var art = UiKit.Node("Art", _root.transform); // the picture with its ring: one group, so its opacity does not touch the texts
+            var rowLabel = UiKit.Button("Row", _root.transform, "", new Color(0.2f, 0.5f, 0.35f, 0.28f), () =>
+            {
+                if (_key.Length > 0) press?.Invoke(_key);
+            });
+            _hit = rowLabel.transform.parent.gameObject;
+            _hitBack = _hit.GetComponent<Image>();
+            UiKit.Stretch(_hit);
+            _box = UiKit.Node("Box", _root.transform);
+            var art = UiKit.Node("Art", _box.transform); // the picture with its ring: one group, so its opacity does not touch the texts
             UiKit.Stretch(art);
             _art = art.AddComponent<CanvasGroup>();
             _art.blocksRaycasts = false;
@@ -140,8 +180,17 @@ internal sealed class IconStrip
             UiKit.Stretch(_picture.gameObject);
             _letter = UiKit.Text("Letter", _face.transform, 20, new Color(1f, 1f, 1f, 0.5f), TextAlignmentOptions.Center);
             UiKit.Stretch(_letter.gameObject);
-            _center = UiKit.Text("Center", _root.transform, 16, Color.white, TextAlignmentOptions.Center);
-            _corner = UiKit.Text("Corner", _root.transform, 12, Color.white, TextAlignmentOptions.BottomRight);
+            _center = UiKit.Text("Center", _box.transform, 16, Color.white, TextAlignmentOptions.Center);
+            _corner = UiKit.Text("Corner", _box.transform, 12, Color.white, TextAlignmentOptions.BottomRight);
+            var removeLabel = UiKit.Button("Remove", _root.transform, "✕", new Color(0.55f, 0.2f, 0.22f, 0.7f), () =>
+            {
+                if (_key.Length > 0) remove?.Invoke(_key); // deleted at once, no question asked
+            });
+            _removeButton = removeLabel.transform.parent.gameObject;
+            removeLabel.fontSize = 14;
+            if (ui != null) UiKit.Hover(_removeButton, () => ui.ShowTip(_removeButton, "목록에서 삭제"), () => ui.HideTip(_removeButton));
+            _name = UiKit.Text("Name", _root.transform, 15, Color.white, TextAlignmentOptions.MidlineLeft);
+            _state = UiKit.Text("State", _root.transform, 14, Color.white, TextAlignmentOptions.MidlineRight);
             Outline(_center);
             Outline(_corner);
         }
@@ -158,10 +207,23 @@ internal sealed class IconStrip
             }
         }
 
-        public void Place(double x, double y, double size)
+        const double RemoveSize = 22;
+
+        public void Place(double x, double y, double size, double width, bool removable)
         {
             _size = size;
-            UiKit.Place(_root, x, y, size, size);
+            UiKit.Place(_root, x, y, width > 0 ? width : size, size);
+            UiKit.Place(_box, 0, 0, size, size);
+            if (width > 0)
+            {
+                var end = width - 6 - (removable ? RemoveSize + 6 : 0); // the delete button sits at the very end of the row
+                UiKit.Place(_name.gameObject, size + 8, 0, Math.Max(20, end - StateWidth - 4 - size - 8), size);
+                UiKit.Place(_state.gameObject, end - StateWidth, 0, StateWidth, size);
+                UiKit.Place(_removeButton, width - 6 - RemoveSize, (size - RemoveSize) / 2, RemoveSize, RemoveSize);
+                _name.fontSize = (float)Math.Max(12, size * 0.42);
+                _state.fontSize = (float)Math.Max(11, size * 0.36);
+            }
+
             var inset = (float)(size * 0.08);
             UiKit.Stretch(_face.gameObject, inset, inset, inset, inset);
             UiKit.Stretch(_center.gameObject);
@@ -171,9 +233,24 @@ internal sealed class IconStrip
             _letter.fontSize = (float)(size * 0.45);
         }
 
-        public void Bind(IconDto icon)
+        const double StateWidth = 44;
+
+        public void Bind(IconDto icon, bool list, bool removable)
         {
+            _removeButton.SetActive(removable);
             _root.SetActive(true);
+            _key = list ? icon.Key : "";
+            _group.blocksRaycasts = list; // only a row of a pressable list takes the mouse
+            _hit.SetActive(list);
+            _name.gameObject.SetActive(list);
+            _state.gameObject.SetActive(list);
+            if (list)
+            {
+                _hitBack.color = icon.Dim ? new Color(0.35f, 0.35f, 0.4f, 0.22f) : new Color(0.2f, 0.5f, 0.35f, 0.32f);
+                UiKit.SetText(_name, icon.Name);
+                UiKit.SetText(_state, icon.Dim ? "<color=#9ea9bb>꺼짐</color>" : "<color=#7be39a>켜짐</color>");
+            }
+
             var sprite = UiKit.Picture(icon.Image);
             _picture.sprite = sprite;
             _picture.gameObject.SetActive(sprite != null);

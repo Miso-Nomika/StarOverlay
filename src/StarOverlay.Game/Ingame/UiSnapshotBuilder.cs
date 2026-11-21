@@ -58,6 +58,7 @@ public sealed class UiSnapshotBuilder(IIngameHooks hooks, LayoutStore layouts)
         foreach (var meter in host.Meters) Note(meter.PluginId);
         foreach (var chat in host.Chats) Note(chat.PluginId);
         foreach (var icons in host.Icons) Note(icons.PluginId);
+        foreach (var stepper in host.Steppers) Note(stepper.PluginId);
         foreach (var editor in host.Editors) Note(editor.PluginId);
         foreach (var button in host.FrameButtons) Note(button.PluginId);
         foreach (var setting in host.Settings) Note(setting.PluginId);
@@ -70,6 +71,9 @@ public sealed class UiSnapshotBuilder(IIngameHooks hooks, LayoutStore layouts)
                 window.Widgets.Add(new WidgetDto { Kind = WidgetKind.Label, Id = panel.Id, Title = panel.Title, Text = Safe(panel.Text) });
                 if (window.Title == DisplayName(id) && panel.Title.Length > 0) window.Title = panel.Title;
             }
+
+            foreach (var stepper in host.Steppers.Where(s => s.PluginId == id))
+                window.Widgets.Add(new WidgetDto { Kind = WidgetKind.Stepper, Id = stepper.Id, Title = stepper.Label, Text = Safe(stepper.Value) });
 
             foreach (var meter in host.Meters.Where(m => m.PluginId == id))
             {
@@ -115,7 +119,7 @@ public sealed class UiSnapshotBuilder(IIngameHooks hooks, LayoutStore layouts)
 
             foreach (var icons in host.Icons.Where(i => i.PluginId == id))
             {
-                var widget = new WidgetDto { Kind = WidgetKind.Icons, Id = icons.Id, IconSize = Safe(icons.Size, 0), IconsVertical = SafeFlag(icons.Vertical) };
+                var widget = new WidgetDto { Kind = WidgetKind.Icons, Id = icons.Id, IconSize = Safe(icons.Size, 0), IconsVertical = SafeFlag(icons.Vertical), IconsClickable = icons.Click != null, IconsRemovable = icons.Remove != null };
                 foreach (var icon in Safe(icons.Icons))
                     widget.Icons.Add(new IconDto
                     {
@@ -169,7 +173,7 @@ public sealed class UiSnapshotBuilder(IIngameHooks hooks, LayoutStore layouts)
             // a window that only shows icons (the editor widget lives in its settings window) is drawn bare, with only a small handle, once its
             // top tab is hidden; while it is on, it keeps its top tab so it can be found when no icon is there
             window.Bare = window.Layout.HeaderHidden && window.Widgets.Any(w => w.Kind == WidgetKind.Icons) && window.Widgets.All(w => w.Kind is WidgetKind.Icons or WidgetKind.Editor);
-            windows.Add(window);
+            if (!window.Layout.WindowHidden) windows.Add(window); // "숨김": the plugin works, its window is not sent, so nothing is drawn
         }
 
         return windows;
@@ -191,6 +195,7 @@ public sealed class UiSnapshotBuilder(IIngameHooks hooks, LayoutStore layouts)
         "dps.meter" => "미터기",
         "chat" => "채팅",
         "buff.tracker" => "버프 트래커",
+        "skill.repeat" => "선입력",
         _ => pluginId,
     };
 
@@ -200,7 +205,7 @@ public sealed class UiSnapshotBuilder(IIngameHooks hooks, LayoutStore layouts)
     {
         var window = new WindowDto { Id = RootWindowId, Title = "시스템" };
         foreach (var plugin in hooks.Plugins().OrderBy(p => p.Id, StringComparer.OrdinalIgnoreCase))
-            window.Settings.Add(new SettingDto { Key = plugin.Id, Label = DisplayName(plugin.Id), Kind = "plugin", Value = !plugin.Enabled ? "off" : layouts.Get(plugin.Id, new LayoutDto()).HeaderHidden ? "hidden" : "on" });
+            window.Settings.Add(new SettingDto { Key = plugin.Id, Label = DisplayName(plugin.Id), Kind = "plugin", Value = !plugin.Enabled ? "off" : layouts.Get(plugin.Id, new LayoutDto()).WindowHidden ? "invisible" : layouts.Get(plugin.Id, new LayoutDto()).HeaderHidden ? "hidden" : "on" });
         if (LiveUpdate.Available)
             window.Settings.Add(new SettingDto { Key = "update", Label = LiveUpdate.Current.Length > 0 ? "새 버전이 있습니다 (v" + LiveUpdate.Current + " → v" + LiveUpdate.Latest + ")" : "새 버전이 있습니다 (v" + LiveUpdate.Latest + ")", Kind = "notice", Value = LiveUpdate.ReleasePage });
         window.Layout = layouts.Get(RootWindowId, index, RootDefaultWidth, RootDefaultHeight); // the size a new player starts with (not stored until the window is moved or resized)

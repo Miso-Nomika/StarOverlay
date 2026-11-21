@@ -45,7 +45,13 @@ public sealed class IngameService : IDisposable
         _layouts = new LayoutStore(layoutPath);
         _builder = new UiSnapshotBuilder(hooks, _layouts);
         AssetsRoot = assetsRoot;
+        SkillRepeat.Changed += SendRepeat;
     }
+
+
+    /// <summary>Tells the agent which skills to repeat while held (also right after it connects).</summary>
+    void SendRepeat() =>
+        Send(new Envelope { T = MessageType.Repeat, Repeat = new RepeatDto { Active = SkillRepeat.Active, Skills = SkillRepeat.Skills.ToList(), IntervalMs = SkillRepeat.IntervalMs } });
 
     public string? AssetsRoot { get; }
 
@@ -88,6 +94,7 @@ public sealed class IngameService : IDisposable
 
     public void Dispose()
     {
+        SkillRepeat.Changed -= SendRepeat;
         _stop.Cancel();
         CloseClient();
         try
@@ -161,6 +168,7 @@ public sealed class IngameService : IDisposable
         Send(new Envelope { T = MessageType.Hello, V = Protocol.Version });
         if (AssetsRoot is not null) Send(new Envelope { T = MessageType.Assets, Root = AssetsRoot });
         if (TablesRoot is not null) Send(new Envelope { T = MessageType.Tables, Root = TablesRoot });
+        SendRepeat(); // a reconnecting agent learns the chosen skills again
         lock (_state) _lastWindows = ""; // the new client gets everything again
         _connected = true;
         _dirty = true;
@@ -295,6 +303,11 @@ public sealed class IngameService : IDisposable
             case MessageType.Msg when message.Msg is not null:
                 NetMessage?.Invoke(message.Msg);
                 break;
+            case MessageType.Cmd when message.Cmd is { Action: CommandAction.SkillPressed } pressed:
+                if (int.TryParse(pressed.Key, out var skill)) SkillRepeat.NotePressed(skill, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
+
+                _dirty = true; // the candidate list of the plugin changed
+                break;
             case MessageType.Cmd when message.Cmd is not null:
                 Apply(message.Cmd);
                 _dirty = true;
@@ -373,6 +386,17 @@ public sealed class IngameService : IDisposable
             case CommandAction.RecordDelete:
                 DeleteRecords(cmd);
                 break;
+            case CommandAction.Press when cmd.Key.StartsWith("step:", StringComparison.Ordinal):
+                var cut = cmd.Key.LastIndexOf(':');
+                if (cut > "step:".Length && int.TryParse(cmd.Key[(cut + 1)..], out var direction))
+                    _hooks.Host.PressStep(cmd.Window, cmd.Key["step:".Length..cut], direction);
+                break;
+            case CommandAction.Press when cmd.Key.StartsWith("icon-remove:", StringComparison.Ordinal):
+                _hooks.Host.RemoveIcon(cmd.Window, cmd.Key["icon-remove:".Length..]);
+                break;
+            case CommandAction.Press when cmd.Key.StartsWith("icon:", StringComparison.Ordinal):
+                _hooks.Host.PressIcon(cmd.Window, cmd.Key["icon:".Length..]);
+                break;
             case CommandAction.Press when cmd.Key.StartsWith("frame:", StringComparison.Ordinal):
                 PressFrame(cmd);
                 break;
@@ -381,12 +405,16 @@ public sealed class IngameService : IDisposable
                 break;
             case CommandAction.Plugin when cmd.Window == UiSnapshotBuilder.RootWindowId:
                 var state = cmd.Value is "true" ? "on" : cmd.Value is "false" ? "off" : cmd.Value;
-                if (state is not ("on" or "hidden" or "off")) break;
+                if (state is not ("on" or "hidden" or "invisible" or "off")) break;
                 _hooks.SetPluginEnabled(cmd.Key, state != "off");
                 if (state != "off")
                 {
                     var plugin = windows.FirstOrDefault(w => w.Id == cmd.Key)?.Layout ?? new LayoutDto { X = 0.05, Y = 0.1, W = 0.2, H = 0.2 };
-                    _layouts.Update(cmd.Key, plugin, l => Edited(l, c => c.HeaderHidden = state == "hidden"));
+                    _layouts.Update(cmd.Key, plugin, l => Edited(l, c =>
+                    {
+                        c.HeaderHidden = state == "hidden";
+                        c.WindowHidden = state == "invisible";
+                    }));
                 }
 
                 break;

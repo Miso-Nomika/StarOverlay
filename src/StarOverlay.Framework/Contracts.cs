@@ -122,7 +122,12 @@ public sealed record EditOp(string Action, string Key, string Value);
 
 public interface IUiRegistry
 {
-    void AddIcons(string id, Func<IReadOnlyList<IconView>> icons, Func<int>? size = null, Func<bool>? vertical = null);
+    /// <summary>
+    /// Round icons. With <paramref name="click"/> the icons are drawn as a list (one per row, the name beside the picture and "켜짐"/"꺼짐" at the end,
+    /// "꺼짐" for a dimmed icon) and pressing a row calls it with the icon's key. With <paramref name="remove"/> each row also has a delete button
+    /// (no question asked) that calls it with the icon's key.
+    /// </summary>
+    void AddIcons(string id, Func<IReadOnlyList<IconView>> icons, Func<int>? size = null, Func<bool>? vertical = null, Action<string>? click = null, Action<string>? remove = null);
 
     void AddEditor(
         string id,
@@ -132,6 +137,9 @@ public interface IUiRegistry
         Action<EditOp> changed);
 
     void AddLabel(string id, string title, Func<string> text);
+
+    /// <summary>A row inside the window: the label, a minus button, the current value and a plus button; the buttons call <paramref name="step"/> with -1 or +1.</summary>
+    void AddStepper(string id, string label, Func<string> value, Action<int> step);
 
     void AddMeter(string id, Func<IReadOnlyList<MeterRowView>> rows, Func<int>? rowHeight = null, Func<int>? textSize = null);
 

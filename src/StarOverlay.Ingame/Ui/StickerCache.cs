@@ -14,7 +14,6 @@ namespace StarOverlay.Ingame.Ui;
 /// </summary>
 static class StickerCache
 {
-    static readonly Regex Code = new(@"[A-Za-z]+_\d+_\d+", RegexOptions.Compiled); // sticker_17_317003, emoji_2_2012005: the picture's name in the game
     static readonly Regex Tags = new("<[^>]+>", RegexOptions.Compiled);
     static readonly Dictionary<string, Texture2D> _textures = new();
     static float _next;
@@ -25,9 +24,7 @@ static class StickerCache
     /// <summary>The sticker name inside a chat text (null when the line is not a picture message).</summary>
     internal static string NameOf(string text)
     {
-        if (string.IsNullOrEmpty(text) || !text.StartsWith("emojiPic=", StringComparison.Ordinal)) return null;
-        var match = Code.Match(text);
-        return match.Success ? match.Value : null;
+        return StickerPairing.NameOf(text);
     }
 
     internal static Texture2D Get(string name) => name != null && _textures.TryGetValue(name, out var texture) && texture != null ? texture : null;
@@ -71,8 +68,8 @@ static class StickerCache
                 if (image == null || image.texture == null) continue;
                 var who = GameChatUi.Find(node, "lab_name")?.GetComponent<TMP_Text>();
                 pictures.Add((who == null ? "" : Squash(Tags.Replace(who.text ?? "", "")), image));
-                var byName = Code.Match(image.texture.name ?? "");
-                if (byName.Success && Get(byName.Value) == null && Copy(byName.Value, image)) copiedAny = true; // the texture carries the sticker name
+                var byName = StickerPairing.FindName(image.texture.name);
+                if (byName != null && Get(byName) == null && Copy(byName, image)) copiedAny = true; // the texture carries the sticker name
             }
 
             // otherwise pair them by order: the newest picture bubble with the newest picture line of the same sender. All picture lines take

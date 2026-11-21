@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>StarOverlay.PreInput</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="StarOverlay.Framework.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\StarOverlay.Framework\StarOverlay.Framework.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- the skill pictures of the game (weapon skills and imagine skills), shared with the buff tracker's library (not copied into the repository twice) -->
+    <Content Include="..\StarOverlay.BuffTracker\assets\library\Skills\*.png" Link="assets\library\Skills\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\StarOverlay.BuffTracker\assets\library\Imagines\*.png" Link="assets\library\Imagines\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>

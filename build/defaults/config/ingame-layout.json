@@ -86,5 +86,17 @@
     "Collapsed": false,
     "HeaderHidden": false,
     "Channels": 63
+  },
+  "skill.repeat": {
+    "X": 0.5101041666666668,
+    "Y": 0,
+    "W": 0.19406249999999994,
+    "H": 0.2533333333333334,
+    "Opacity": 100,
+    "Pinned": false,
+    "Collapsed": false,
+    "HeaderHidden": false,
+    "WindowHidden": false,
+    "Channels": 63
   }
 }

@@ -42,6 +42,14 @@ internal sealed class WindowView
     int _scroll;
     int _maxScroll;
     double _rowStep = 24; // the height of one meter row (the drag distance that counts as one row)
+
+    // the thin scroll bar at the right of a list that does not fit: where the list is, how many rows show of how many
+    double _barTop, _barHeight;
+    int _barVisible, _barTotal;
+    Image _barTrack, _barThumb;
+
+    const double BarWidth = 4;     // the bar is this wide, at the right edge of the body
+    const double BarRoom = 8;      // the rows of a list with a bar are this much narrower
     public int Failures;
     public bool Dead;
 
@@ -389,6 +397,7 @@ internal sealed class WindowView
         var bodyWidth = Math.Max(10, width - Pad * 2);
         var bodyHeight = Math.Max(10, height - (layout.HeaderHidden && !layout.Collapsed ? 8 : Header + 6));
         double y = 0;
+        _barTotal = _barVisible = 0;
         var rowIndex = 0;
         var labelIndex = 0;
         var chatShown = false;
@@ -407,12 +416,19 @@ internal sealed class WindowView
             var visible = Math.Max(1, (int)Math.Floor((listHeight + 2) / step));
             _maxScroll = Math.Max(0, plugins.Count - visible);
             _scroll = Math.Clamp(_scroll, 0, _maxScroll);
+            var rowWidth = bodyWidth;
+            if (plugins.Count > visible)
+            {
+                rowWidth = bodyWidth - BarRoom;
+                (_barTop, _barHeight, _barVisible, _barTotal) = (0, listHeight, visible, plugins.Count);
+            }
+
             for (var i = _scroll; i < plugins.Count; i++)
             {
                 var plugin = plugins[i];
                 if (y + 24 > listHeight + 2) break;
                 var row = Row(rowIndex++);
-                row.Place(0, y, bodyWidth, 24);
+                row.Place(0, y, rowWidth, 24);
                 row.ShowChoice(plugin.Label, plugin.Value, state => _root.Send(new CommandDto { Window = UiRoot.RootId, Action = CommandAction.Plugin, Key = plugin.Key, Value = state }));
                 y += step;
             }
@@ -434,6 +450,7 @@ internal sealed class WindowView
             {
                 case WidgetKind.Label:
                 {
+                    if (widget.Text.Length == 0) break; // nothing to say: no empty line
                     var label = Label(labelIndex++);
                     var lines = widget.Text.Split('\n').Length;
                     var h = Math.Max(20, lines * 19);
@@ -441,6 +458,15 @@ internal sealed class WindowView
                     UiKit.SetText(label, widget.Text);
                     label.gameObject.SetActive(true);
                     y += h + 2;
+                    break;
+                }
+                case WidgetKind.Stepper:
+                {
+                    var stepperId = widget.Id;
+                    var row = Row(rowIndex++);
+                    row.Place(0, y, bodyWidth, 26);
+                    row.ShowStepper(widget.Title, widget.Text, direction => _root.Send(new CommandDto { Window = Id, Action = CommandAction.Press, Key = "step:" + stepperId + ":" + direction }));
+                    y += 30;
                     break;
                 }
                 case WidgetKind.Meter:
@@ -464,12 +490,19 @@ internal sealed class WindowView
                     var visible = Math.Max(1, (int)((listHeight - y) / step));
                     _maxScroll = Math.Max(0, widget.Rows.Count - visible);
                     _scroll = Math.Clamp(_scroll, 0, _maxScroll);
+                    var meterWidth = bodyWidth;
+                    if (widget.Rows.Count > visible)
+                    {
+                        meterWidth = bodyWidth - BarRoom;
+                        (_barTop, _barHeight, _barVisible, _barTotal) = (y, listHeight - y, visible, widget.Rows.Count);
+                    }
+
                     for (var i = _scroll; i < widget.Rows.Count; i++)
                     {
                         var data = widget.Rows[i];
                         if (y + step > listHeight) break;
                         var row = Row(rowIndex++);
-                        row.Place(0, y, bodyWidth, step - 2);
+                        row.Place(0, y, meterWidth, step - 2);
                         row.ShowMeter(data, size, System.IO.Path.Combine(_root.AssetsRoot, Id, "assets"));
                         y += step;
                     }
@@ -494,8 +527,30 @@ internal sealed class WindowView
                 case WidgetKind.Icons when !iconsShown:
                 {
                     iconsShown = true;
-                    _strip ??= new IconStrip(_body.transform);
-                    y += _strip.Apply(widget, y, dto.Bare ? 100000 : bodyWidth);
+                    _strip ??= new IconStrip(_body.transform, key => _root.Send(new CommandDto { Window = Id, Action = CommandAction.Press, Key = "icon:" + key }), key => _root.Send(new CommandDto { Window = Id, Action = CommandAction.Press, Key = "icon-remove:" + key }), _root);
+                    if (widget.IconsClickable)
+                    {
+                        // a list of skills: the wheel and a drag move it by rows when more rows are there than fit
+                        var (size, step) = IconStrip.ListMetrics(widget);
+                        _rowStep = step;
+                        var room = Math.Max(step, bodyHeight - y);
+                        var visible = Math.Max(1, (int)Math.Floor((room + (step - size)) / step));
+                        _maxScroll = Math.Max(0, widget.Icons.Count - visible);
+                        _scroll = Math.Clamp(_scroll, 0, _maxScroll);
+                        var listWidth = bodyWidth;
+                        if (widget.Icons.Count > visible)
+                        {
+                            listWidth = bodyWidth - BarRoom;
+                            (_barTop, _barHeight, _barVisible, _barTotal) = (y, room, visible, widget.Icons.Count);
+                        }
+
+                        y += _strip.Apply(widget, y, listWidth, _scroll, visible);
+                    }
+                    else
+                    {
+                        y += _strip.Apply(widget, y, dto.Bare ? 100000 : bodyWidth);
+                    }
+
                     break;
                 }
                 case WidgetKind.Chat when !chatShown:
@@ -508,6 +563,8 @@ internal sealed class WindowView
             }
         }
 
+        UpdateScrollBar(bodyWidth);
+
         // hide what this snapshot does not use
         for (var i = rowIndex; i < _rows.Count; i++) _rows[i].Hide();
         for (var i = labelIndex; i < _labels.Count; i++) _labels[i].gameObject.SetActive(false);
@@ -519,6 +576,32 @@ internal sealed class WindowView
             _footTime.gameObject.SetActive(false);
         }
 
+    }
+
+    /// <summary>The thin bar at the right: its thumb is as long as the share of the rows that shows and sits where the list is scrolled to.</summary>
+    void UpdateScrollBar(double bodyWidth)
+    {
+        if (_barTotal <= _barVisible || _barHeight < 24)
+        {
+            if (_barTrack != null)
+            {
+                _barTrack.gameObject.SetActive(false);
+                _barThumb.gameObject.SetActive(false);
+            }
+
+            return;
+        }
+
+        _barTrack ??= UiKit.Box("ScrollTrack", _body.transform, new Color(1f, 1f, 1f, 0.10f));
+        _barThumb ??= UiKit.Box("ScrollThumb", _body.transform, new Color(1f, 1f, 1f, 0.5f));
+        var thumb = Math.Max(18, _barHeight * _barVisible / _barTotal);
+        var offset = _maxScroll > 0 ? (_barHeight - thumb) * _scroll / _maxScroll : 0;
+        UiKit.Place(_barTrack.gameObject, bodyWidth - BarWidth, _barTop, BarWidth, _barHeight);
+        UiKit.Place(_barThumb.gameObject, bodyWidth - BarWidth, _barTop + offset, BarWidth, thumb);
+        _barTrack.gameObject.SetActive(true);
+        _barThumb.gameObject.SetActive(true);
+        _barTrack.transform.SetAsLastSibling(); // above the rows
+        _barThumb.transform.SetAsLastSibling();
     }
 
     RowView Row(int index)
@@ -691,6 +774,7 @@ internal sealed class WindowView
 
         public void ShowToggle(string label, bool on, Action click)
         {
+            HideChoices(); // a row that was a choice or a stepper before is a plain row again
             var bar = UiKit.Rt(_fill.gameObject);
             bar.anchorMin = Vector2.zero;
             bar.anchorMax = new Vector2(1f, 1f);
@@ -732,21 +816,21 @@ internal sealed class WindowView
 
         public void Hide() => _root.SetActive(false);
 
-        static readonly string[] States = { "on", "hidden", "off" };
-        static readonly string[] StateCaptions = { "켜기", "상단탭 숨김", "끄기" };
-        readonly GameObject[] _stateButtons = new GameObject[3];
-        readonly Image[] _stateBack = new Image[3];
+        static readonly string[] States = { "on", "hidden", "invisible", "off" };
+        static readonly string[] StateCaptions = { "켜기", "상단탭 숨김", "숨김", "끄기" };
+        readonly GameObject[] _stateButtons = new GameObject[4];
+        readonly Image[] _stateBack = new Image[4];
 
         /// <summary>A plugin line of the system window: its name on the left and, on the right, three buttons: on, header hidden, off.</summary>
         public void ShowChoice(string label, string state, Action<string> pick)
         {
             ShowToggle(label, state != "off", () => { });
-            UiKit.Place(_left.gameObject, 6, 0, Math.Max(40, _w - 172), _h);
+            UiKit.Place(_left.gameObject, 6, 0, Math.Max(40, _w - 216), _h);
             UiKit.SetText(_left, Escape(label));
-            _button.interactable = false; // only the three buttons act
-            var widths = new[] { 40.0, 76.0, 40.0 };
+            _button.interactable = false; // only the four buttons act
+            var widths = new[] { 40.0, 76.0, 40.0, 40.0 };
             var x = _w - 4;
-            for (var i = 2; i >= 0; i--)
+            for (var i = States.Length - 1; i >= 0; i--)
             {
                 x -= widths[i];
                 var index = i;
@@ -773,6 +857,47 @@ internal sealed class WindowView
         {
             foreach (var button in _stateButtons)
                 if (button != null) button.SetActive(false);
+            foreach (var button in _stepButtons)
+                if (button != null) button.SetActive(false);
+            if (_stepValue != null) _stepValue.gameObject.SetActive(false);
+        }
+
+        readonly GameObject[] _stepButtons = new GameObject[2];
+        TextMeshProUGUI _stepValue;
+        Action<int> _stepPick;
+
+        const double StepButton = 26, StepValue = 64;
+
+        /// <summary>A row "label  [-] value [+]": the buttons step a value of the plugin down or up.</summary>
+        public void ShowStepper(string label, string value, Action<int> step)
+        {
+            ShowToggle("", true, () => { });
+            _fill.color = new Color(0.22f, 0.3f, 0.45f, 0.3f);
+            _button.interactable = false; // only the two buttons act
+            UiKit.Place(_left.gameObject, 6, 0, Math.Max(30, _w - (StepButton * 2 + StepValue + 14)), _h);
+            UiKit.SetText(_left, Escape(label));
+            if (_stepValue == null)
+            {
+                _stepValue = UiKit.Text("StepValue", _root.transform, 14, Color.white, TextAlignmentOptions.Center);
+                for (var i = 0; i < 2; i++)
+                {
+                    var direction = i == 0 ? -1 : 1;
+                    var caption = UiKit.Button("Step_" + (i == 0 ? "minus" : "plus"), _root.transform, i == 0 ? "−" : "+", new Color(0.22f, 0.3f, 0.45f, 0.9f), () => _stepPick?.Invoke(direction));
+                    caption.fontSize = 16;
+                    _stepButtons[i] = caption.transform.parent.gameObject;
+                }
+            }
+
+            var plusX = _w - 4 - StepButton;
+            var valueX = plusX - 3 - StepValue;
+            var minusX = valueX - 3 - StepButton;
+            UiKit.Place(_stepButtons[0], minusX, 2, StepButton, Math.Max(10, _h - 4));
+            UiKit.Place(_stepButtons[1], plusX, 2, StepButton, Math.Max(10, _h - 4));
+            UiKit.Place(_stepValue.gameObject, valueX, 0, StepValue, _h);
+            UiKit.SetText(_stepValue, Escape(value));
+            foreach (var button in _stepButtons) button.SetActive(true);
+            _stepValue.gameObject.SetActive(true);
+            _stepPick = step;
         }
     }
 }

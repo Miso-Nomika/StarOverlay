@@ -67,6 +67,7 @@ public static class LayoutMath
             Pinned = layout.Pinned,
             Collapsed = layout.Collapsed,
             HeaderHidden = layout.HeaderHidden,
+            WindowHidden = layout.WindowHidden,
             Channels = layout.Channels,
         };
     }
@@ -105,6 +106,7 @@ public static class LayoutMath
             Pinned = layout.Pinned,
             Collapsed = layout.Collapsed,
             HeaderHidden = layout.HeaderHidden,
+            WindowHidden = layout.WindowHidden,
             Channels = layout.Channels,
         });
 
@@ -119,6 +121,7 @@ public static class LayoutMath
             Pinned = layout.Pinned,
             Collapsed = layout.Collapsed,
             HeaderHidden = layout.HeaderHidden,
+            WindowHidden = layout.WindowHidden,
             Channels = layout.Channels,
         });
 }

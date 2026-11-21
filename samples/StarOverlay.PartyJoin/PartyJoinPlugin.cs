@@ -4,7 +4,7 @@ namespace StarOverlay.PartyJoin;
 
 public sealed class PartyJoinPlugin : IPlugin
 {
-    public PluginInfo Info { get; } = new("party.join", "파티 가입", "0.4.5");
+    public PluginInfo Info { get; } = new("party.join", "파티 가입", "0.4.6");
 
     public void Load(IPluginContext context)
     {

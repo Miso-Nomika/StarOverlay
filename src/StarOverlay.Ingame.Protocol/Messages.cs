@@ -36,6 +36,10 @@ public static class MessageType
     /// <summary>Service to agent: save the game's tables as JSON into the folder in <c>Root</c> (when they are not there for this game version yet).</summary>
     public const string Tables = "tables";
 
+    /// <summary>Service to agent: the skills to keep firing while their key is held and the repeat interval (an empty list stops the repeating).</summary>
+    public const string Repeat = "repeat";
+
+
     /// <summary>Agent to service: the tables are saved (<c>Written</c> true: new files, read them again) or could not be (<c>Error</c>).</summary>
     public const string TablesDone = "tables-done";
 }
@@ -51,6 +55,7 @@ public static class CommandAction
     public const string Collapse = "collapse";  // value = true/false
     public const string Plugin = "plugin";      // window "root": key = plugin id, value = true/false
     public const string Settings = "settings";  // open the service's settings / record window for the window's plugin
+    public const string SkillPressed = "skill-pressed"; // agent: key = the game skill id that was just pressed (candidates of the "선입력" plugin)
     public const string Prompt = "prompt";      // open the translation prompt window of the service
     public const string Set = "set";            // key, value: numbers (clamped to the setting range), choices, or the default value
     public const string Records = "records";    // ask for the window's fight record list
@@ -97,6 +102,23 @@ public sealed class Envelope
     public List<RecordHeadDto>? Records { get; set; }
 
     public RecordDto? Record { get; set; }
+
+    /// <summary>With <see cref="MessageType.Repeat"/>.</summary>
+    public RepeatDto? Repeat { get; set; }
+
+}
+
+/// <summary>The skills to repeat while held (game skill ids) and the interval between two repeats in milliseconds.</summary>
+public sealed class RepeatDto
+{
+    public const int DefaultInterval = 100;
+
+    /// <summary>The plugin is loaded: the agent watches the skill keys. False: it does nothing.</summary>
+    public bool Active { get; set; }
+
+    public List<int> Skills { get; set; } = [];
+
+    public int IntervalMs { get; set; } = DefaultInterval;
 }
 
 /// <summary>Normalized (0..1) rectangle on the 1920x1080 reference canvas, plus window state.</summary>
@@ -119,10 +141,13 @@ public sealed class LayoutDto
     /// <summary>The title and the buttons of the window are hidden (only its content is drawn, and clicks go through to the game).</summary>
     public bool HeaderHidden { get; set; }
 
+    /// <summary>The window is not drawn at all (state "숨김" of the system window): the plugin stays loaded and keeps working.</summary>
+    public bool WindowHidden { get; set; }
+
     /// <summary>Chat windows: which channels are shown, one bit each (local, world, guild, whisper, party, newbie). All on = 63.</summary>
     public int Channels { get; set; } = 63;
 
-    public LayoutDto Copy() => new() { X = X, Y = Y, W = W, H = H, Opacity = Opacity, Pinned = Pinned, Collapsed = Collapsed, HeaderHidden = HeaderHidden, Channels = Channels };
+    public LayoutDto Copy() => new() { X = X, Y = Y, W = W, H = H, Opacity = Opacity, Pinned = Pinned, Collapsed = Collapsed, HeaderHidden = HeaderHidden, WindowHidden = WindowHidden, Channels = Channels };
 }
 
 public sealed class WindowDto
@@ -157,6 +182,7 @@ public static class WidgetKind
     public const string Chat = "chat";
     public const string Icons = "icons";
     public const string Editor = "editor";
+    public const string Stepper = "stepper"; // Title = the label, Text = the value; the buttons send Press "step:<id>:-1" / "step:<id>:1"
 }
 
 public sealed class WidgetDto
@@ -194,6 +220,12 @@ public sealed class WidgetDto
 
     /// <summary>Icons widget: the icons stand in a column (one per row) instead of a row.</summary>
     public bool IconsVertical { get; set; }
+
+    /// <summary>Icons widget: drawn as a pressable list (name and on/off at the end of each row); a press sends "icon:&lt;key&gt;".</summary>
+    public bool IconsClickable { get; set; }
+
+    /// <summary>Icons widget: every row has a delete button; a press sends "icon-remove:&lt;key&gt;".</summary>
+    public bool IconsRemovable { get; set; }
 
     public List<IconDto> Icons { get; set; } = [];
 

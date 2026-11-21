@@ -5,6 +5,9 @@ namespace StarOverlay.Framework;
 
 public sealed record PluginPanel(string PluginId, string Id, string Title, Func<string> Text);
 
+/// <summary>A row "label  [-] value [+]" inside the window of a plugin: the player steps a value down or up (<paramref name="Step"/> gets -1 or +1).</summary>
+public sealed record PluginStepper(string PluginId, string Id, string Label, Func<string> Value, Action<int> Step);
+
 public sealed record PluginMeter(string PluginId, string Id, Func<IReadOnlyList<MeterRowView>> Rows, Func<int>? RowHeight = null, string? Empty = null, bool Combat = true, Func<int>? TextSize = null);
 
 public sealed record PluginChat(string PluginId, string Id, Func<IReadOnlyList<ChatLineView>> Lines, string Empty, Func<int>? TextSize = null, Func<int>? LineGap = null);
@@ -20,7 +23,7 @@ public sealed record PluginEncounterLog(
     Func<IReadOnlyList<EncounterHead>>? Heads = null,
     Func<string, EncounterView?>? Open = null);
 
-public sealed record PluginIcons(string PluginId, string Id, Func<IReadOnlyList<IconView>> Icons, Func<int>? Size = null, Func<bool>? Vertical = null);
+public sealed record PluginIcons(string PluginId, string Id, Func<IReadOnlyList<IconView>> Icons, Func<int>? Size = null, Func<bool>? Vertical = null, Action<string>? Click = null, Action<string>? Remove = null);
 
 public sealed record PluginEditor(
     string PluginId,
@@ -57,6 +60,7 @@ public sealed class PluginHost : IDisposable
     private readonly List<PluginFrameButton> _frames = [];
     private readonly List<PluginEncounterLog> _encounters = [];
     private readonly List<PluginIcons> _icons = [];
+    private readonly List<PluginStepper> _steppers = [];
     private readonly List<PluginEditor> _editors = [];
     private readonly List<PluginLoadError> _errors = [];
 
@@ -74,7 +78,60 @@ public sealed class PluginHost : IDisposable
 
     public IReadOnlyList<PluginIcons> Icons => _icons;
 
+    public IReadOnlyList<PluginStepper> Steppers => _steppers;
+
+    /// <summary>The player pressed the minus (-1) or the plus (+1) of a stepper row; false when the plugin has no such row or failed on it.</summary>
+    public bool PressStep(string pluginId, string stepperId, int direction)
+    {
+        var stepper = _steppers.FirstOrDefault(s => s.PluginId == pluginId && s.Id == stepperId);
+        if (stepper == null) return false;
+        try
+        {
+            stepper.Step(direction < 0 ? -1 : 1);
+            return true;
+        }
+        catch (Exception exception)
+        {
+            _logs.Add($"{pluginId}: step failed: {exception.Message}");
+            return false;
+        }
+    }
+
     public IReadOnlyList<PluginEditor> Editors => _editors;
+
+    /// <summary>The player pressed the delete button of a row of a plugin that offers one (<c>Remove</c> of its icons).</summary>
+    public bool RemoveIcon(string pluginId, string iconKey)
+    {
+        var icons = _icons.FirstOrDefault(i => i.PluginId == pluginId && i.Remove != null);
+        if (icons == null) return false;
+        try
+        {
+            icons.Remove!(iconKey);
+            return true;
+        }
+        catch (Exception exception)
+        {
+            _logs.Add($"{pluginId}: icon removal failed: {exception.Message}");
+            return false;
+        }
+    }
+
+    /// <summary>The player pressed an icon of a plugin that listens to presses (<c>Click</c> of its icons); false when there is no such icon list or the plugin failed on it.</summary>
+    public bool PressIcon(string pluginId, string iconKey)
+    {
+        var icons = _icons.FirstOrDefault(i => i.PluginId == pluginId && i.Click != null);
+        if (icons == null) return false;
+        try
+        {
+            icons.Click!(iconKey);
+            return true;
+        }
+        catch (Exception exception)
+        {
+            _logs.Add($"{pluginId}: icon press failed: {exception.Message}");
+            return false;
+        }
+    }
 
     /// <summary>Hands a user edit to the editor widget it came from; false when the plugin has no such editor or the plugin failed on it.</summary>
     public bool ApplyEdit(string pluginId, string editorId, EditOp op)
@@ -129,6 +186,7 @@ public sealed class PluginHost : IDisposable
         var contexts = _running.Select(running => running.Context).OfType<PluginLoadContext>().Distinct().ToArray();
         _running.Clear();
         _panels.Clear();
+        _steppers.Clear();
         _settings.Clear();
         _meters.Clear();
         _chats.Clear();
@@ -271,11 +329,17 @@ public sealed class PluginHost : IDisposable
 
     private sealed class HostUi(string pluginId, PluginHost host) : IUiRegistry
     {
-        public void AddIcons(string id, Func<IReadOnlyList<IconView>> icons, Func<int>? size = null, Func<bool>? vertical = null) =>
-            host.AddIcons(new PluginIcons(pluginId, id, icons, size, vertical));
+        public void AddIcons(string id, Func<IReadOnlyList<IconView>> icons, Func<int>? size = null, Func<bool>? vertical = null, Action<string>? click = null, Action<string>? remove = null) =>
+            host.AddIcons(new PluginIcons(pluginId, id, icons, size, vertical, click, remove));
 
         public void AddEditor(string id, string title, Func<IReadOnlyList<EditRowView>> rows, Func<IReadOnlyList<EditCandidateView>> candidates, Action<EditOp> changed) =>
             host.AddEditor(new PluginEditor(pluginId, id, title, rows, candidates, changed));
+
+        public void AddStepper(string id, string label, Func<string> value, Action<int> step)
+        {
+            if (host._steppers.Any(existing => existing.PluginId == pluginId && existing.Id == id)) return;
+            host._steppers.Add(new PluginStepper(pluginId, id, label, value, step));
+        }
 
         public void AddLabel(string id, string title, Func<string> text) =>
             host.AddPanel(new PluginPanel(pluginId, id, title, text));

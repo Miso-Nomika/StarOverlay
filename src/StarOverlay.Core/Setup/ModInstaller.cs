@@ -12,7 +12,7 @@ public sealed record InstallReport(bool Success, string Message, IReadOnlyList<s
 public static class ModInstaller
 {
     /// <summary>The plugins that are switched on after an install, folder name = plugin id.</summary>
-    public static readonly string[] StandardPlugins = ["dps.meter", "chat", "party.join", "buff.tracker"];
+    public static readonly string[] StandardPlugins = ["dps.meter", "chat", "party.join", "buff.tracker", "skill.repeat"];
 
     public static InstallReport Install(string game, PayloadPaths payload, Func<string, bool>? isGameRunning = null, string? modHome = null)
     {

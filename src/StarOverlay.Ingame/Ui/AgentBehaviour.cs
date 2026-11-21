@@ -36,6 +36,7 @@ public class AgentBehaviour : MonoBehaviour
             }
 
             TableDump.Tick();
+            Skills.HeldSkillRepeater.Tick();
             _ui.Tick();
             GameChatInput.Poll();
             StickerCache.Poll();
@@ -52,6 +53,7 @@ public class AgentBehaviour : MonoBehaviour
                 else if (message.T == MessageType.Records) _ui.OnRecords(message.Window, message.Records);
                 else if (message.T == MessageType.Record) _ui.OnRecord(message.Window, message.Record);
                 else if (message.T == MessageType.Tables && message.Root != null) TableDump.Request(Link, message.Root);
+                else if (message.T == MessageType.Repeat && message.Repeat != null) Skills.HeldSkillRepeater.Apply(message.Repeat, Link);
                 else if (message.T == MessageType.Err) Plugin.L.LogWarning("service: " + message.Error);
             }
 

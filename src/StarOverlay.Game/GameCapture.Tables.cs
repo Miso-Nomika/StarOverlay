@@ -106,7 +106,11 @@ public sealed partial class GameCapture
         _levelOwners = ReadSkillLevelOwners(SkillLevelTable);
         _ownerHints = gameNames;
 
-        if (skills.Names.Count > 0) _skillNames = skills.Names;
+        if (skills.Names.Count > 0)
+        {
+            _skillNames = skills.Names;
+            SkillBook.Set(skills.Names, ReadSkillIcons(SkillTable), ReadSkillFamilies(SkillTable));
+        }
         if (skills.Imagines.Count > 0) _imagines = skills.Imagines;
         if (buffs.Meta.Count > 0)
         {
@@ -414,6 +418,86 @@ public sealed partial class GameCapture
         }
 
         return map;
+    }
+
+    /// <summary>
+    /// The skills that belong together, as the skill table links them: the steps of a combo ("NextSkillId", "SkillLevelGroup"), the same skill in the
+    /// air or switched ("SkySkillId", "SwitchSkillId") and the enhanced version of a skill (it points to the skill it enhances). Each skill gets the
+    /// lowest id of its family; a skill without any link is not listed.
+    /// </summary>
+    internal static Dictionary<int, int> ReadSkillFamilies(string path)
+    {
+        var parent = new Dictionary<int, int>();
+        int Find(int id)
+        {
+            while (parent[id] != id)
+            {
+                parent[id] = parent[parent[id]];
+                id = parent[id];
+            }
+
+            return id;
+        }
+
+        void Join(int a, int b)
+        {
+            if (a == b || !parent.ContainsKey(a) || !parent.ContainsKey(b)) return;
+            var (low, high) = (Find(a), Find(b));
+            if (low == high) return;
+            if (low > high) (low, high) = (high, low);
+            parent[high] = low; // the lowest id stays the root
+        }
+
+        var links = new List<(int From, int To)>();
+        if (!File.Exists(path)) return [];
+        try
+        {
+            using var stream = File.OpenRead(path);
+            using var document = JsonDocument.Parse(stream);
+            foreach (var entry in document.RootElement.EnumerateObject())
+            {
+                if (!int.TryParse(entry.Name, out var id)) continue;
+                parent[id] = id;
+                foreach (var field in new[] { "SkillLevelGroup", "SkySkillId", "NextSkillId", "SwitchSkillId" })
+                {
+                    if (entry.Value.TryGetProperty(field, out var value) && value.TryGetInt32(out var other) && other > 0) links.Add((id, other));
+                }
+            }
+        }
+        catch (Exception)
+        {
+            return [];
+        }
+
+        foreach (var (from, to) in links) Join(from, to);
+        var roots = parent.Keys.ToDictionary(id => id, Find);
+        var size = roots.Values.GroupBy(root => root).ToDictionary(group => group.Key, group => group.Count());
+        return roots.Where(pair => size[pair.Value] > 1).ToDictionary(pair => pair.Key, pair => pair.Value);
+    }
+
+    /// <summary>The picture of every skill of the skill table: the last part of its "Icon" path ("ui/textures/skill_weapon_cq/weapon_cq-01_kx08" gives "weapon_cq-01_kx08").</summary>
+    internal static Dictionary<int, string> ReadSkillIcons(string path)
+    {
+        var icons = new Dictionary<int, string>();
+        if (!File.Exists(path)) return icons;
+        try
+        {
+            using var stream = File.OpenRead(path);
+            using var document = JsonDocument.Parse(stream);
+            foreach (var entry in document.RootElement.EnumerateObject())
+            {
+                var row = entry.Value;
+                if (!int.TryParse(entry.Name, out var id) || !row.TryGetProperty("Icon", out var icon) || icon.ValueKind != JsonValueKind.String) continue;
+                var text = icon.GetString() ?? "";
+                var name = text[(text.LastIndexOf('/') + 1)..];
+                if (name.Length > 0) icons[id] = name;
+            }
+        }
+        catch (Exception)
+        {
+        }
+
+        return icons;
     }
 
     static (Dictionary<int, string> Names, Dictionary<int, ImagineInfo> Imagines) ReadSkills(string path)
