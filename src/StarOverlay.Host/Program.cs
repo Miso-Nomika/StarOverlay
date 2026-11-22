@@ -17,7 +17,7 @@ internal static class Program
         if (!agent)
         {
             // the old overlay windows are gone: the display lives inside the game now
-            MessageBox.Show("화면 표시는 게임 안에서 나옵니다. StarOverlay.exe로 설치한 뒤 게임을 켜세요.", "Star Overlay", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            MessageBox.Show("화면 표시는 게임 안에서 나옵니다. StarOverlay.exe로 설치한 뒤 게임을 켜세요.", "StarOverlay", MessageBoxButtons.OK, MessageBoxIcon.Information);
             return;
         }
 

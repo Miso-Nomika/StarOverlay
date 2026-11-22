@@ -4,7 +4,8 @@ namespace StarOverlay.Game.Packets;
 
 public static class GameProcesses
 {
-    public static readonly string[] Names = ["StarASIA", "BPSR", "BPSR_STEAM"];
+    /// <summary>The game's process names (without .exe): the official client, the Steam version (StarASIA_STEAM.exe) and older names.</summary>
+    public static readonly string[] Names = ["StarASIA", "StarASIA_STEAM", "BPSR", "BPSR_STEAM"];
 }
 
 /// <summary>Where game packets come from (raw-socket helper pipe, recorded frames).</summary>

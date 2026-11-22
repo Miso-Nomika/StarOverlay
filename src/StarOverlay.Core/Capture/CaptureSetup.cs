@@ -113,6 +113,9 @@ public static class CaptureSetup
         sb.AppendLine($"Get-NetFirewallRule -DisplayName {Quote(FirewallRuleName)} | Remove-NetFirewallRule");
         sb.AppendLine($"Stop-Process -Name 'StarOverlay.Capture' -Force");
         sb.AppendLine($"Remove-Item -LiteralPath {Quote(InstallDirectory)} -Recurse -Force");
+        // the "StarOverlay" folder above it goes too when nothing else is in it
+        sb.AppendLine($"$parent = {Quote(Path.GetDirectoryName(InstallDirectory)!)}");
+        sb.AppendLine("if ((Test-Path -LiteralPath $parent) -and -not (Get-ChildItem -LiteralPath $parent -Force)) { Remove-Item -LiteralPath $parent -Force }");
         sb.AppendLine("exit 0");
         return sb.ToString();
     }

@@ -116,7 +116,7 @@ internal sealed class AgentContext : ApplicationContext, IIngameHooks
 
     private void Tick()
     {
-        if (_service.Connected || Process.GetProcessesByName("StarASIA").Length > 0)
+        if (_service.Connected || StarOverlay.Game.Packets.GameProcesses.Names.Any(name => Process.GetProcessesByName(name).Length > 0))
         {
             _idleSince = DateTime.UtcNow;
             return;

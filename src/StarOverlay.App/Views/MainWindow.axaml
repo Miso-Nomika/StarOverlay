@@ -4,7 +4,7 @@
         xmlns:model="using:StarOverlay.Core.Model"
         x:Class="StarOverlay.App.Views.MainWindow"
         x:DataType="vm:ShellViewModel"
-        Title="Star Overlay"
+        Title="StarOverlay"
         FontFamily="avares://StarOverlay.App/Assets/Fonts#Pretendard"
         FontWeight="Bold"
         Width="1000" Height="680"
@@ -46,6 +46,21 @@
       <Setter Property="FontSize" Value="13"/>
       <Setter Property="Foreground" Value="White"/>
     </Style>
+    <Style Selector="Button.danger">
+      <Setter Property="Background" Value="#D64545"/>
+      <Setter Property="Foreground" Value="White"/>
+    </Style>
+    <Style Selector="Button.danger:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="#E85A5A"/>
+      <Setter Property="Foreground" Value="White"/>
+    </Style>
+    <Style Selector="Button.danger:pressed /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="#B83838"/>
+      <Setter Property="Foreground" Value="White"/>
+    </Style>
+    <Style Selector="Button.danger:disabled /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="#80D64545"/>
+    </Style>
   </Window.Styles>
 
   <Grid ColumnDefinitions="290,*">
@@ -53,7 +68,7 @@
     <Border Grid.Column="0" Padding="26,30" Background="#0DFFFFFF" BorderThickness="0,0,1,0" BorderBrush="#1FFFFFFF">
       <DockPanel>
         <StackPanel DockPanel.Dock="Top" Spacing="6" Margin="0,0,0,26">
-          <TextBlock Text="Star Overlay" FontSize="28" FontWeight="Bold"/>
+          <TextBlock Text="StarOverlay" FontSize="28" FontWeight="Bold"/>
           <TextBlock Text="블루 프로토콜: 스타 레조넌스" Classes="hint"/>
           <TextBlock Margin="0,10,0,0" Classes="body"
                      Text="게임 화면 위에 DPS 미터기, 채팅, 버프 트래커, 파티 가입 정보를 보여 줍니다."/>
@@ -141,12 +156,10 @@
             <Border Classes="card">
               <StackPanel Spacing="10">
                 <StackPanel Spacing="4">
-                  <TextBlock Text="전투 정보 수신" Classes="title"/>
-                  <TextBlock Text="파티원의 피해량과 채팅을 읽어 오는 도우미입니다." Classes="hint"/>
+                  <TextBlock Text="전부 삭제" Classes="title"/>
+                  <TextBlock Text="목록의 모든 게임에서 오버레이를 제거하고, 전투 정보 수신 도우미(Program Files)와 저장 위치(AppData)의 설정·기록·번역 모델까지 모두 지웁니다. 되돌릴 수 없습니다." Classes="hint"/>
                 </StackPanel>
-                <TextBlock Text="{Binding CaptureText}" Classes="body"/>
-                <Button Content="{Binding CaptureActionLabel}" HorizontalAlignment="Left" MinWidth="104"
-                        IsVisible="{Binding ShowCaptureAction}" IsEnabled="{Binding !CaptureBusy}" Command="{Binding SetupCaptureCommand}"/>
+                <Button Content="전부 삭제" Classes="danger" HorizontalAlignment="Left" MinWidth="104" IsEnabled="{Binding !IngameBusy}" Command="{Binding RemoveAllCommand}"/>
               </StackPanel>
             </Border>
 
@@ -194,6 +207,18 @@
                   <TextBlock Text="{Binding StorageHelper}" Classes="hint"/>
                 </StackPanel>
                 <Button Content="폴더 열기" HorizontalAlignment="Left" Command="{Binding OpenDataFolderCommand}"/>
+              </StackPanel>
+            </Border>
+
+            <Border Classes="card">
+              <StackPanel Spacing="10">
+                <StackPanel Spacing="4">
+                  <TextBlock Text="전투 정보 수신" Classes="title"/>
+                  <TextBlock Text="파티원의 피해량과 채팅을 읽어 오는 도우미입니다." Classes="hint"/>
+                </StackPanel>
+                <TextBlock Text="{Binding CaptureText}" Classes="body"/>
+                <Button Content="{Binding CaptureActionLabel}" HorizontalAlignment="Left" MinWidth="104"
+                        IsVisible="{Binding ShowCaptureAction}" IsEnabled="{Binding !CaptureBusy}" Command="{Binding SetupCaptureCommand}"/>
               </StackPanel>
             </Border>
 

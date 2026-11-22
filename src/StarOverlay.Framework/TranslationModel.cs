@@ -19,13 +19,87 @@ public static class TranslationModel
     /// <summary>One thing to download. <see cref="Relative"/> is a path under <see cref="Root"/>; a zip is unpacked into that folder.</summary>
     public sealed record Piece(string Label, string Url, string Sha256, long Bytes, string Relative, bool Unzip);
 
-    /// <summary>What "받기" fetches: the two llama-server builds (small) first, the model (about 3 GB) last.</summary>
-    public static readonly IReadOnlyList<Piece> Pieces =
+    /// <summary>A model that can be downloaded: its file name (the name the choice shows), where it comes from and what it must hash to.</summary>
+    public sealed record CatalogModel(string File, string Url, string Sha256, long Bytes)
+    {
+        public Piece ToPiece() => new("번역 모델", Url, Sha256, Bytes, Path.Combine("models", File), false);
+    }
+
+    /// <summary>The models the download can fetch, the default first. The one that is picked in the model choice is the only one fetched.</summary>
+    public static readonly IReadOnlyList<CatalogModel> Catalog =
+    [
+        new(DefaultModelFile, "https://huggingface.co/bartowski/Qwen_Qwen3.5-4B-GGUF/resolve/main/" + DefaultModelFile, "13c16f426047e2de38cd075bdade4a7bcbc8c774384876f677740cda65f8a983", DefaultModelBytes),
+        new("Qwen_Qwen3.5-9B-Q4_K_M.gguf", "https://huggingface.co/bartowski/Qwen_Qwen3.5-9B-GGUF/resolve/main/Qwen_Qwen3.5-9B-Q4_K_M.gguf", "d784ce9eda1a5a7b51e8f705a9e6310844bf4f173654d115823c775fdea56d43", 6_169_341_984),
+    ];
+
+    /// <summary>The two llama-server builds (small), always fetched when missing.</summary>
+    static readonly IReadOnlyList<Piece> Tools =
     [
         new("번역 도구(CPU)", LlamaRelease + "llama-b12377-bin-win-cpu-x64.zip", "d3b60c5abbe3a131c77e568310547492438bc7c785721eb765d2d817fe4424c5", 25_122_435, Path.Combine("llama", "cpu"), true),
         new("번역 도구(GPU)", LlamaRelease + "llama-b12377-bin-win-vulkan-x64.zip", "0162ff9acc36ef88575d673e56e16673f455fb685fea1857c96fb57dd4831ff7", 38_116_679, Path.Combine("llama", "vulkan"), true),
-        new("번역 모델", "https://huggingface.co/bartowski/Qwen_Qwen3.5-4B-GGUF/resolve/main/" + DefaultModelFile, "13c16f426047e2de38cd075bdade4a7bcbc8c774384876f677740cda65f8a983", DefaultModelBytes, Path.Combine("models", DefaultModelFile), false),
     ];
+
+    /// <summary>The two tools and the default model (what an unpicked download fetched before models could be picked).</summary>
+    public static readonly IReadOnlyList<Piece> Pieces =
+    [
+        Tools[0],
+        Tools[1],
+        Catalog[0].ToPiece(),
+    ];
+
+    static CatalogModel? FindCatalog(string file) =>
+        Catalog.FirstOrDefault(model => string.Equals(model.File, file, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>
+    /// The model the download fetches: the picked one when it is on the list, else (nothing picked and no model on the PC) the default one.
+    /// Null when there is nothing to fetch for the model (the pick is the player's own file, or a model is already there and none is picked).
+    /// </summary>
+    public static CatalogModel? ModelToFetch()
+    {
+        var picked = _selected.Length > 0 ? FindCatalog(_selected) : null;
+        if (picked is not null) return picked;
+        return _selected.Length == 0 && Models().Count == 0 ? Catalog[0] : null;
+    }
+
+    /// <summary>The tools (if missing) and the model to fetch: what the download button gets.</summary>
+    public static IReadOnlyList<Piece> PiecesToFetch()
+    {
+        var pieces = new List<Piece>(Tools);
+        if (ModelToFetch() is { } model) pieces.Add(model.ToPiece());
+        return pieces;
+    }
+
+    /// <summary>The model choice: the usable files on this PC and the models that can be downloaded and are not here yet.</summary>
+    public static IReadOnlyList<string> ModelChoices()
+    {
+        var local = Models().ToList();
+        foreach (var model in Catalog)
+            if (!local.Any(name => string.Equals(name, model.File, StringComparison.OrdinalIgnoreCase)) && !string.Equals(model.File, Releasing, StringComparison.OrdinalIgnoreCase))
+                local.Add(model.File);
+        return local;
+    }
+
+    /// <summary>The model the choice shows: the picked one, else the one that will run, else the default one (so a PC without any model offers something to pick).</summary>
+    public static string ChosenModel()
+    {
+        if (_selected.Length > 0) return _selected;
+        var name = EffectiveName();
+        return name.Length > 0 ? name : Catalog[0].File;
+    }
+
+    /// <summary>True when the model shown in the choice is on this PC (a picked model that is not downloaded yet is not, even if another model is there to run).</summary>
+    public static bool ChosenModelPresent
+    {
+        get
+        {
+            var dir = ModelsDirectory;
+            return dir.Length > 0 && Usable(Path.Combine(dir, ChosenModel())) && !string.Equals(ChosenModel(), Releasing, StringComparison.OrdinalIgnoreCase);
+        }
+    }
+
+    /// <summary>True when the download button has something to fetch: a tool is missing, or the model to fetch is not here.</summary>
+    public static bool NeedsDownload =>
+        Downloading || LlamaPath(false) is null || (ModelToFetch() is { } model && !Present(model.ToPiece()));
 
     static readonly object Gate = new();
     static HttpClient? _shared;
@@ -159,8 +233,8 @@ public static class TranslationModel
         var size = modelBytes / (1024.0 * 1024 * 1024);
         var (vram, cards) = size switch
         {
-            <= 4.5 => (8, "RTX 3060 Ti · RTX 3070 · RTX 4060 Ti급"),
-            <= 8 => (12, "RTX 3060 12GB · RTX 4070급"),
+            <= 4.5 => (8, "RTX 4060 이상"),
+            <= 8 => (12, "RTX 4070 Ti 이상"),
             <= 12 => (16, "RTX 4070 Ti Super · RTX 4080급"),
             _ => (24, "RTX 3090 · RTX 4090급"),
         };
@@ -176,6 +250,14 @@ public static class TranslationModel
         var path = ModelPath();
         try
         {
+            var chosen = FindCatalog(ChosenModel());
+            // the picked model is on the download list but not on this PC yet: the hint is for its size, with a note that it is not downloaded
+            if (chosen is not null && !Present(chosen.ToPiece()))
+            {
+                var hint = GpuHint(chosen.Bytes, GpuMemory.Current()?.FreeGb);
+                return hint.Length == 0 ? "" : "아직 받지 않음 · " + hint;
+            }
+
             return GpuHint(path is null ? 0 : new FileInfo(path).Length, GpuMemory.Current()?.FreeGb);
         }
         catch (IOException)
@@ -215,7 +297,7 @@ public static class TranslationModel
                 return "실패 · " + _failure;
         }
 
-        var model = ModelPath() is not null ? "있음" : "없음";
+        var model = ChosenModelPresent ? "있음" : "없음"; // the picked model; one that is not downloaded yet shows as missing though another model could run
         var tools = LlamaPath(false) is not null ? "있음" : "없음";
         return $"모델 {model} · 번역 도구 {tools}";
     }
@@ -234,7 +316,8 @@ public static class TranslationModel
         }
 
         _shared ??= NewClient();
-        _ = Task.Run(() => RunAsync(_shared, Pieces, CancellationToken.None));
+        var pieces = PiecesToFetch(); // chosen now: a later change of the pick does not change this download
+        _ = Task.Run(() => RunAsync(_shared, pieces, CancellationToken.None));
     }
 
     /// <summary>Downloads what is missing and checks it. Returns false (and shows the reason in the status line) when a piece fails.</summary>

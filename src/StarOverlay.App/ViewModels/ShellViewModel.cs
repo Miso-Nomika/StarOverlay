@@ -261,7 +261,7 @@ public partial class ShellViewModel : ObservableObject
 
     private void Persist()
     {
-        if (string.IsNullOrWhiteSpace(_rosterPath)) return;
+        if (string.IsNullOrWhiteSpace(_rosterPath) || _removedAll) return;
         ClientRosterStore.Save(_rosterPath, Clients.ToArray(), SelectedClient?.Id);
     }
 

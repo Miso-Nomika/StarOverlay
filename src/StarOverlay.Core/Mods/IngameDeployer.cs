@@ -129,7 +129,7 @@ public static class IngameDeployer
 
     public static bool IsGameRunning(string game)
     {
-        foreach (var name in new[] { "StarASIA", "BPSR", "BPSR_STEAM" })
+        foreach (var name in new[] { "StarASIA", "StarASIA_STEAM", "BPSR", "BPSR_STEAM" })
         {
             foreach (var process in Process.GetProcessesByName(name))
             {

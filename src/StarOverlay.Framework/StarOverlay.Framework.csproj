@@ -5,7 +5,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <RootNamespace>StarOverlay.Framework</RootNamespace>
-    <Version>0.4.7</Version>
+    <Version>0.4.8</Version>
   </PropertyGroup>
 
   <ItemGroup>

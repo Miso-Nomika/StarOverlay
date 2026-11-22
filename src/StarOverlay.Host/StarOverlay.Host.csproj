@@ -11,8 +11,8 @@
     <!-- the runtime's own texts in 13 languages are 13 MB: only Korean (and the English fallback) are shipped -->
     <SatelliteResourceLanguages>en;ko</SatelliteResourceLanguages>
     <!-- what Task Manager shows for this background process -->
-    <Product>Star Overlay</Product>
-    <AssemblyTitle>Star Overlay 백그라운드 서비스</AssemblyTitle>
+    <Product>StarOverlay</Product>
+    <AssemblyTitle>StarOverlay 백그라운드 서비스</AssemblyTitle>
     <Description>게임 안 표시에 데이터를 보내는 백그라운드 서비스(게임이 꺼지면 함께 종료)</Description>
   </PropertyGroup>
 

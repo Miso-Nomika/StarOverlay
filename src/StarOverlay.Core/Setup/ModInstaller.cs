@@ -33,9 +33,23 @@ public static class ModInstaller
         return new InstallReport(true, "설치를 마쳤습니다.", done);
     }
 
-    public static InstallReport Uninstall(string game, Func<string, bool>? isGameRunning = null)
+    /// <param name="purge">Also deletes the game's <c>bpsr</c> folder (what the agent made while the game ran: state, tab icons...). Used by "전부 삭제".</param>
+    public static InstallReport Uninstall(string game, Func<string, bool>? isGameRunning = null, bool purge = false)
     {
         var result = IngameDeployer.Uninstall(game, isGameRunning);
+        if (result.Success && purge)
+        {
+            try
+            {
+                var bpsr = ModLayout.Root(game);
+                if (Directory.Exists(bpsr)) Directory.Delete(bpsr, recursive: true);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                return new InstallReport(false, "게임 폴더의 bpsr 폴더를 지우지 못했습니다.", []);
+            }
+        }
+
         return new InstallReport(result.Success, result.Success ? "제거했습니다. 플러그인 설정과 전투 기록은 데이터 폴더에 그대로 있습니다." : result.Message, []);
     }
 

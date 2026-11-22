@@ -306,7 +306,7 @@ static class GameChatInput
         // the bar's top-left goes to our window's lower left corner, a few pixels below it
         var dx = ours.Left + SideInset * scale - left; // the bar starts a little to the right of our window's left edge
         var dy = ours.Bottom - Gap - top;
-        if (Math.Abs(dx) < 0.5f && Math.Abs(dy) < 0.5f) { _barMoved = true; ShowBadge(parts, ours, scale, anchor); return; }
+        if (Math.Abs(dx) < 0.5f && Math.Abs(dy) < 0.5f) { _barMoved = true; ShowBadge(parts, ours, scale, anchor); KeepImeInLine(parts, scale); return; }
 
         RectTransformUtility.ScreenPointToWorldPointInRectangle(canvasRect, new Vector2(left, top), camera, out var worldFrom);
         RectTransformUtility.ScreenPointToWorldPointInRectangle(canvasRect, new Vector2(left + dx, top + dy), camera, out var worldTo);
@@ -318,8 +318,50 @@ static class GameChatInput
         }
 
         ShowBadge(parts, ours, scale, anchor);
+        KeepImeInLine(parts, scale);
 
         _barMoved = true;
+    }
+
+    // The letters being composed and the suggestion list of the system's input method are drawn by the system from the point the game gives it
+    // (Input.compositionCursorPos, counted from the top left of the screen). The game's input line writes to its RIGHT end (the composed letters
+    // end at the point, the list opens from it to the right), so the point's x is the right end of the field as the game gives it. The game also gives the
+    // lower edge of the field as the height, which put the letters below the bar and the list over it. The height is the upper edge of the line: the
+    // letters lie in the line and the list opens above the bar.
+    static void KeepImeInLine(List<RectTransform> parts, float scale)
+    {
+        try
+        {
+            if (!Input.imeIsSelected) return;
+
+            RectTransform input = null, back = null;
+            foreach (var part in parts)
+            {
+                if (part.name == "input_field") input = part;
+                else if (part.name == "img_channel") back = part;
+            }
+
+            if (input == null) return;
+            var box = ScreenBox(input);
+            var unit = Math.Max(1f, scale);
+            // the point is on the world channel badge, a bit right of its middle (65% of its width from its left edge); without the badge, at the bar's right end
+            float x;
+            if (_badge != null && _badge.activeSelf)
+            {
+                var badge = ScreenBox(_badge.GetComponent<RectTransform>());
+                x = badge.Left + (badge.Right - badge.Left) * 0.65f;
+            }
+            else
+            {
+                x = (back != null ? ScreenBox(back).Right : box.Right) - 2f * unit;
+            }
+
+            var point = new Vector2(x, Screen.height - box.Top);
+            Input.compositionCursorPos = point;
+        }
+        catch (Exception)
+        {
+        }
     }
 
     static void RestoreBar()

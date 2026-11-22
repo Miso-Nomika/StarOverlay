@@ -41,6 +41,7 @@ internal static class UiKit
                 if (!File.Exists(path)) continue;
                 var asset = TMP_FontAsset.CreateFontAsset(path, 0, 90, 9, GlyphRenderMode.SDFAA, 1024, 1024);
                 if (asset == null) continue;
+                EnsureShader(asset);
                 asset.hideFlags = HideFlags.HideAndDontSave;
                 main.fallbackFontAssetTable.Add(asset);
                 added.Add(file);
@@ -50,6 +51,38 @@ internal static class UiKit
         catch (Exception e)
         {
             Plugin.L.LogWarning("font fallbacks failed: " + e.Message);
+        }
+    }
+
+    /// <summary>
+    /// A font made at run time gets the material of the shader "TextMeshPro/Distance Field". When a game build does not carry that shader (stripped), the material
+    /// has no usable shader and the letters are not drawn at all (the windows are). Then the shader of a font the game itself has is taken over.
+    /// </summary>
+    static void EnsureShader(TMP_FontAsset asset)
+    {
+        try
+        {
+            var material = asset.material;
+            var shader = material != null ? material.shader : null;
+            var usable = shader != null && shader.isSupported && !shader.name.StartsWith("Hidden/", StringComparison.Ordinal);
+            if (usable || material == null) return;
+            var replacement = Shader.Find("TextMeshPro/Distance Field");
+            if (replacement == null || !replacement.isSupported)
+            {
+                replacement = null;
+                foreach (var other in Resources.FindObjectsOfTypeAll<TMP_FontAsset>())
+                {
+                    var otherShader = other == null || other == asset || other.material == null ? null : other.material.shader;
+                    if (otherShader == null || !otherShader.isSupported || otherShader.name.StartsWith("Hidden/", StringComparison.Ordinal)) continue;
+                    replacement = otherShader;
+                    break;
+                }
+            }
+
+            if (replacement != null) material.shader = replacement;
+        }
+        catch (Exception)
+        {
         }
     }
 
@@ -63,8 +96,20 @@ internal static class UiKit
             {
                 var path = Path.Combine(Plugin.PluginDirectory, "fonts", "PretendardJP-Bold.otf");
                 if (File.Exists(path))
+                {
                     _font = TMP_FontAsset.CreateFontAsset(path, 0, 90, 9, GlyphRenderMode.SDFAA, 1024, 1024);
-                if (_font != null) AddFallbackFonts(_font);
+                    if (_font == null)
+                    {
+                        // measured on a game whose folder name has Chinese letters (the Steam version): the text engine cannot open a font from such a path and
+                        // gives nothing back, so no letter is drawn. The font file is handed over as a font object instead (the engine then reads it from memory)
+                        _font = TMP_FontAsset.CreateFontAsset(new UnityEngine.Font(path), 90, 9, GlyphRenderMode.SDFAA, 1024, 1024);
+                    }
+                }
+                if (_font != null)
+                {
+                    EnsureShader(_font);
+                    AddFallbackFonts(_font);
+                }
             }
             catch (Exception e)
             {

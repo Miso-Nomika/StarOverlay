@@ -262,8 +262,8 @@ public sealed class UiSnapshotBuilder(IIngameHooks hooks, LayoutStore layouts)
             dto.Label = "번역 도구";
             dto.Value = TranslationModel.StatusText(); // live: the download progress
             dto.Default = ToolDeleteKey; // the key of the delete button of the row
-            dto.CanDelete = TranslationModel.Models().Count > 0 && !TranslationModel.Downloading;
-            dto.CanDownload = TranslationModel.Downloading || TranslationModel.Models().Count == 0 || TranslationModel.LlamaPath(false) is null;
+            dto.CanDelete = TranslationModel.ChosenModelPresent && !TranslationModel.Downloading; // only the model that is shown can be deleted, not another one that happens to run
+            dto.CanDownload = TranslationModel.NeedsDownload; // the tools, and the model that is picked in the model choice (only that one)
             return dto;
         }
 
@@ -279,9 +279,9 @@ public sealed class UiSnapshotBuilder(IIngameHooks hooks, LayoutStore layouts)
         }
         else if (setting.Key == TranslationModelKey)
         {
-            // the model files found on this PC; the one that will run is shown ("없음" while there is none, nothing to pick then)
-            dto.Choices = TranslationModel.Models().ToList();
-            dto.Value = dto.Choices.Count == 0 ? "없음" : TranslationModel.EffectiveName();
+            // the model files found on this PC and the models that can be downloaded; the picked one is shown (the default one while nothing is picked or here)
+            dto.Choices = TranslationModel.ModelChoices().ToList();
+            dto.Value = TranslationModel.ChosenModel();
             dto.Hint = TranslationModel.GpuHintForModel();
         }
         else if (setting.Maximum > setting.Minimum)

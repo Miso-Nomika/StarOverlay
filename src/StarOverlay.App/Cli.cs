@@ -71,7 +71,7 @@ static class Cli
 
         if (args.Contains("--uninstall", StringComparer.OrdinalIgnoreCase))
         {
-            var removed = ModInstaller.Uninstall(game);
+            var removed = ModInstaller.Uninstall(game, purge: args.Contains("--purge", StringComparer.OrdinalIgnoreCase));
             say(removed.Message);
             return removed.Success ? 0 : 1;
         }

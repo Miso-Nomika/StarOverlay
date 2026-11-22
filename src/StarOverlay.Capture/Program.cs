@@ -21,7 +21,7 @@ internal static class Program
     const int ExitNoAccess = 5;
     const int ExitFailed = 6;
 
-    static readonly string[] GameNames = ["StarASIA", "BPSR", "BPSR_STEAM"];
+    static readonly string[] GameNames = ["StarASIA", "StarASIA_STEAM", "BPSR", "BPSR_STEAM"]; // the Steam version's exe is StarASIA_STEAM.exe
 
     static int Main(string[] args)
     {

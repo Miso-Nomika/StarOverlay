@@ -16,8 +16,8 @@
     <OptimizationPreference>Size</OptimizationPreference>
     <StackTraceSupport>false</StackTraceSupport>
     <UseSystemResourceKeys>true</UseSystemResourceKeys>
-    <Product>Star Overlay</Product>
-    <AssemblyTitle>Star Overlay 게임 통신 수신 도우미</AssemblyTitle>
+    <Product>StarOverlay</Product>
+    <AssemblyTitle>StarOverlay 게임 통신 수신 도우미</AssemblyTitle>
     <Description>Npcap 없이 게임 패킷을 받는 도우미(게임이나 서비스가 끝나면 함께 종료)</Description>
   </PropertyGroup>
 

@@ -222,7 +222,7 @@ internal sealed class ChatPanel
         "길드" => 2,
         "귓속말" => 3,
         "파티" or "그룹" or "콘텐츠" => 4,
-        "뉴비" or "초보자" => 5,
+        "초보자" => 5,
         _ => -1, // unknown channels are always shown
     };
 
@@ -233,7 +233,7 @@ internal sealed class ChatPanel
         "길드" => Guild,
         "월드" => World,
         "귓속말" => Whisper,
-        "뉴비" or "초보자" => Newbie,
+        "초보자" => Newbie,
         "시스템" or "공지" => Notice,
         _ => Local,
     };

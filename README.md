@@ -1,4 +1,4 @@
-# Star Overlay
+# StarOverlay
 
 블루 프로토콜: 스타 레조넌스 화면 위에 DPS 미터기·채팅·버프 트래커·파티 가입 신청 정보를 보여 주고 스킬 연속 입력을 돕는 인게임 오버레이입니다.
 
@@ -117,7 +117,7 @@
 ## 개발자용
 
 ```
-build\release.ps1 -Version 0.4.7     # artifacts\release\StarOverlay-0.4.7.exe 를 만든다
+build\release.ps1 -Version 0.4.8     # artifacts\release\StarOverlay-0.4.8.exe 를 만든다
 ```
 
 처음 한 번은 게임이 만든 interop 파일이 `artifacts\ingame-refs`에 있어야 에이전트를 빌드할 수 있습니다. `build\pack-ingame.ps1 -NoAgent`로 로더만 설치해 게임을 한 번 켠 뒤 `build\collect-interop.ps1 -Game <폴더>`를 실행합니다.
