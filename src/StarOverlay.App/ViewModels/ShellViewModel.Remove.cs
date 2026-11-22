@@ -21,7 +21,8 @@ public partial class ShellViewModel
         {
             var games = Clients.Where(client => Directory.Exists(client.InstallPath)
                 && (IngameDeployer.State(client.InstallPath) != IngameState.NotInstalled
-                    || Directory.Exists(ModLayout.Root(client.InstallPath)))).ToList(); // also a game whose loader is gone but whose bpsr folder is left
+                    || Directory.Exists(ModLayout.Root(client.InstallPath))
+                    || ModInstaller.LoaderLeftovers(client.InstallPath).Count > 0)).ToList(); // also a game with only a bpsr folder or another program's BepInEx left
             foreach (var client in games)
             {
                 Status = $"{client.DisplayName}에서 오버레이를 제거하는 중...";

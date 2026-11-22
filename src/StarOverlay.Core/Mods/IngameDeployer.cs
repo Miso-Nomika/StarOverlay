@@ -162,7 +162,7 @@ public static class IngameDeployer
         var previous = ReadManifest(game);
         var theirWinHttp = Path.Combine(game, "winhttp.dll");
         if (File.Exists(theirWinHttp) && previous is null)
-            return Fail(IngameError.ForeignLoader, "게임 폴더에 다른 프로그램의 winhttp.dll이 있어 설치하지 않았습니다.");
+            return Fail(IngameError.ForeignLoader, "게임 폴더에 다른 프로그램의 winhttp.dll이 있어 설치하지 않았습니다. 설치 프로그램의 \"전부 삭제\"로 지운 뒤 다시 설치해 주세요.");
 
         var manifest = new IngameManifest { PackageId = PackageId(packageDir) ?? "", HostExe = hostExe, InstalledAt = DateTime.UtcNow };
         var bpsrExisted = Directory.Exists(ModLayout.Root(game));

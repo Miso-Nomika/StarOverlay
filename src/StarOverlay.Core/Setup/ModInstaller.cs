@@ -33,7 +33,10 @@ public static class ModInstaller
         return new InstallReport(true, "설치를 마쳤습니다.", done);
     }
 
-    /// <param name="purge">Also deletes the game's <c>bpsr</c> folder (what the agent made while the game ran: state, tab icons...). Used by "전부 삭제".</param>
+    /// <param name="purge">
+    /// "전부 삭제": also deletes the game's <c>bpsr</c> folder (what the agent made while the game ran) and whatever another BepInEx
+    /// program left in the game folder (see <see cref="LoaderLeftovers"/>), which would otherwise stop a new install.
+    /// </param>
     public static InstallReport Uninstall(string game, Func<string, bool>? isGameRunning = null, bool purge = false)
     {
         var result = IngameDeployer.Uninstall(game, isGameRunning);
@@ -43,14 +46,38 @@ public static class ModInstaller
             {
                 var bpsr = ModLayout.Root(game);
                 if (Directory.Exists(bpsr)) Directory.Delete(bpsr, recursive: true);
+                foreach (var path in LoaderLeftovers(game))
+                {
+                    if (Directory.Exists(path)) Directory.Delete(path, recursive: true);
+                    else File.Delete(path);
+                }
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
-                return new InstallReport(false, "게임 폴더의 bpsr 폴더를 지우지 못했습니다.", []);
+                return new InstallReport(false, "게임 폴더의 오버레이·BepInEx 파일을 지우지 못했습니다: " + ex.Message, []);
             }
         }
 
         return new InstallReport(result.Success, result.Success ? "제거했습니다. 플러그인 설정과 전투 기록은 데이터 폴더에 그대로 있습니다." : result.Message, []);
+    }
+
+    /// <summary>
+    /// What a BepInEx (Doorstop) install leaves in the game folder, ours or another program's: the loader proxy, its settings, the loader
+    /// folder with every plugin in it, and Doorstop's own <c>dotnet</c> runtime folder (only when it holds <c>coreclr.dll</c>).
+    /// A game's own files and other kinds of proxies (version.dll ...) are never listed.
+    /// </summary>
+    public static IReadOnlyList<string> LoaderLeftovers(string game)
+    {
+        var found = new List<string>();
+        foreach (var name in new[] { "winhttp.dll", IngameDeployer.DoorstopConfig, ".doorstop_version", IngameDeployer.LoaderFolder })
+        {
+            var path = Path.Combine(game, name);
+            if (File.Exists(path) || Directory.Exists(path)) found.Add(path);
+        }
+
+        var dotnet = Path.Combine(game, "dotnet");
+        if (File.Exists(Path.Combine(dotnet, "coreclr.dll"))) found.Add(dotnet);
+        return found;
     }
 
     /// <summary>
