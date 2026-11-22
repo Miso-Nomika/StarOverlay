@@ -22,6 +22,8 @@ internal sealed class ChatPanel
     const double Pad = 5;
     const int ChannelCount = 6;
     const double TextScale = 1.6;
+    const double PlusWidth = 10; // the thin brim with the ">" / "<" right of the scroll bar: hardly any room left and right of the sign
+    const double CellGap = 3;
 
     // the original overlay's colours
     static readonly Color Local = new(1f, 1f, 1f, 1f);
@@ -54,6 +56,17 @@ internal sealed class ChatPanel
     float _nextLine;
     int _world; // the world chat channel number the game is on now (0 = not known yet)
     readonly GameObject _list;
+    readonly GameObject _plus;
+    readonly GameObject _picker;
+    readonly TextMeshProUGUI _plusLabel;
+    readonly RawImage[] _pickerStarArt = new RawImage[RecentStickers.Slots];
+    readonly GameObject[] _pickerCells = new GameObject[RecentStickers.Slots];
+    readonly RawImage[] _pickerIcons = new RawImage[RecentStickers.Slots];
+    readonly GameObject[] _pickerStars = new GameObject[RecentStickers.Slots];
+    bool _pickerOpen;
+    int _pickerSeen = -1;
+    int _stickerVersionSeen = -1;
+    float _pickerNext;
     readonly List<Bubble> _bubbles = new();
     readonly TextMeshProUGUI _probe;
     readonly Dictionary<string, double> _heights = new();
@@ -108,6 +121,37 @@ internal sealed class ChatPanel
         _barThumb = UiKit.Box("BarThumb", _list.transform, new Color(1f, 1f, 1f, 0.35f));
         _barTrack.gameObject.SetActive(false);
         _barThumb.gameObject.SetActive(false);
+        // the ">": a thin strip at the right edge that opens the box with the stickers (the starred and the ones sent last); it is the "<" that closes the box again
+        _plusLabel = UiKit.Button("Plus", _root.transform, ">", PlusIdle, TogglePicker);
+        _plusLabel.fontSize = 12;
+        _plus = _plusLabel.transform.parent.gameObject;
+        _picker = UiKit.Node("Picker", _root.transform);
+        UiKit.Box("PickerBack", _picker.transform, new Color(0.07f, 0.08f, 0.1f, 0.96f), raycast: true);
+        UiKit.Stretch(_picker.transform.Find("PickerBack").gameObject);
+        for (var i = 0; i < RecentStickers.Slots; i++)
+        {
+            var index = i;
+            var cell = UiKit.Button("Sticker" + i, _picker.transform, "", FilledCell, () => SendRecent(index));
+            _pickerCells[i] = cell.transform.parent.gameObject;
+            var icon = new GameObject("Icon");
+            icon.transform.SetParent(_pickerCells[i].transform, false);
+            icon.layer = _pickerCells[i].layer;
+            _pickerIcons[i] = icon.AddComponent<RawImage>();
+            _pickerIcons[i].raycastTarget = false;
+            UiKit.Stretch(icon);
+            icon.SetActive(false);
+            // the star in the corner of the place: pressing it pins the sticker (or lets it go); it does not send
+            var star = UiKit.Button("Star" + i, _pickerCells[i].transform, "", new Color(0f, 0f, 0f, 0.4f), () => PressStar(index));
+            _pickerStars[i] = star.transform.parent.gameObject;
+            var art = new GameObject("Art");
+            art.transform.SetParent(_pickerStars[i].transform, false);
+            art.layer = _pickerStars[i].layer;
+            _pickerStarArt[i] = art.AddComponent<RawImage>();
+            _pickerStarArt[i].raycastTarget = false;
+            UiKit.Stretch(art);
+        }
+
+        _picker.SetActive(false);
         _probe = UiKit.Text("Probe", _root.transform, 15, Color.white, TextAlignmentOptions.TopLeft);
         _probe.enableWordWrapping = true;
         _probe.overflowMode = TextOverflowModes.Overflow;
@@ -115,8 +159,105 @@ internal sealed class ChatPanel
         UiKit.Place(_probe.gameObject, 0, 0, 10, 10);
     }
 
+    static readonly Color FilledCell = new(0.16f, 0.17f, 0.21f, 1f);
+    static readonly Color EmptyCell = new(0.11f, 0.12f, 0.15f, 1f);
+    static readonly Color StarOn = new(1f, 0.82f, 0.25f, 1f);
+    static readonly Color StarOff = new(0.85f, 0.88f, 0.94f, 0.9f);
+
+    // the window cuts its body to its own rectangle (a RectMask2D); the box beside the window is outside it, so that cut is off while the box is open
+    void ClipBody(bool on)
+    {
+        var mask = _root.GetComponentInParent<RectMask2D>();
+        if (mask != null) mask.enabled = on;
+    }
+
+    void TogglePicker()
+    {
+        _pickerOpen = !_pickerOpen;
+        ClipBody(!_pickerOpen);
+        _picker.SetActive(_pickerOpen);
+        _plusLabel.text = _pickerOpen ? "<" : ">"; // opening and closing stay on the one place of the brim
+        _pickerSeen = -1;
+        if (_pickerOpen) StickerLoader.Prepare(); // the pictures are loaded from the client when the box opens
+    }
+
+    static readonly Color PlusIdle = new(0.16f, 0.18f, 0.24f, 0.95f);
+
+    /// <summary>The brim flashes red for a moment when a sticker could not be handed to the game (a send that worked shows nothing).</summary>
+    void ShowSendResult()
+    {
+        var back = _plus.GetComponent<Image>();
+        if (back == null) return;
+        var failed = StickerSender.Result == 2 && Time.realtimeSinceStartup - StickerSender.ResultAt < 1.2f;
+        back.color = failed ? new Color(0.7f, 0.2f, 0.2f, 0.95f) : PlusIdle;
+    }
+
+    void SendRecent(int index)
+    {
+        var items = RecentStickers.Display();
+        if (index >= items.Count) return;
+        StickerSender.Send(items[index].Code);
+        _pickerOpen = false; // choosing one closes the box
+        ClipBody(true);
+        _picker.SetActive(false);
+        _plusLabel.text = ">";
+    }
+
+    void PressStar(int index)
+    {
+        var items = RecentStickers.Display();
+        if (index >= items.Count) return;
+        if (RecentStickers.ToggleFavorite(items[index].Code)) return;
+        StickerSender.Result = 2; // all places are starred already: the strip flashes red
+        StickerSender.ResultAt = Time.realtimeSinceStartup;
+        StickerSender.ResultVersion++;
+    }
+
+    /// <summary>
+    /// Fills the box: two columns by five rows that share the height of the window, the starred stickers first, then the ones sent last, empty places
+    /// where there are none yet (their pictures come from the cache, or are asked of the client).
+    /// </summary>
+    void PaintPicker()
+    {
+        var items = RecentStickers.Display();
+        _pickerSeen = RecentStickers.Version;
+        _stickerVersionSeen = StickerCache.Version;
+        const int columns = 2;
+        const int rows = 5;
+        var side = Math.Clamp((_h - CellGap * (rows + 1)) / rows, 24, 110);
+        var width = columns * side + (columns + 1) * CellGap;
+        var height = rows * side + (rows + 1) * CellGap;
+        // the box lies right of the brim (the ">" / "<" stays where it is, so quick clicks on it never hit a sticker), outside the window; the chat is not covered
+        UiKit.Place(_picker, _w, 0, width, height);
+        var starSide = Math.Clamp(side * 0.36, 14, 24);
+        for (var i = 0; i < RecentStickers.Slots; i++)
+        {
+            var has = i < items.Count;
+            UiKit.Place(_pickerCells[i], CellGap + (i % columns) * (side + CellGap), CellGap + (i / columns) * (side + CellGap), side, side);
+            _pickerCells[i].GetComponent<Image>().color = has ? FilledCell : EmptyCell;
+            _pickerStars[i].SetActive(has);
+            if (!has)
+            {
+                _pickerIcons[i].gameObject.SetActive(false);
+                continue;
+            }
+
+            UiKit.Place(_pickerStars[i], side - starSide - 2, 2, starSide, starSide);
+            _pickerStarArt[i].texture = items[i].Favorite ? StarArt.Filled : StarArt.Outline;
+            _pickerStarArt[i].color = items[i].Favorite ? StarOn : StarOff;
+            var texture = StickerCache.Get(items[i].Code);
+            if (texture == null) StickerLoader.Request(items[i].Code);
+            _pickerIcons[i].texture = texture;
+            _pickerIcons[i].gameObject.SetActive(texture != null);
+        }
+    }
+
     public void Hide()
     {
+        _pickerOpen = false;
+        ClipBody(true);
+        _picker.SetActive(false);
+        _plusLabel.text = ">";
         _root.SetActive(false);
         GameChatInput.Anchor = null;
     }
@@ -147,7 +288,9 @@ internal sealed class ChatPanel
         _size = (int)Math.Round((widget.TextSize > 0 ? widget.TextSize : 9) * TextScale);
         _gap = Math.Clamp(gap, 0, 24);
         UiKit.Place(_rail, 0, 0, RailWidth, h);
-        UiKit.Place(_list, RailWidth + 4, 0, Math.Max(40, w - RailWidth - 4), h);
+        UiKit.Place(_list, RailWidth + 4, 0, Math.Max(40, w - RailWidth - 4 - PlusWidth), h);
+        UiKit.Place(_plus, w - PlusWidth, 0, PlusWidth, h);
+        RecentStickers.Observe(widget.Lines);
         PaintRail();
         Redraw();
     }
@@ -277,7 +420,7 @@ internal sealed class ChatPanel
         if (signature == _signature && arrived == 0) return;
         _signature = signature;
 
-        var listWidth = Math.Max(40, _w - RailWidth - 4);
+        var listWidth = Math.Max(40, _w - RailWidth - 4 - PlusWidth);
         // exactly the width the body text is laid in (Lay: listWidth - 12 - 16), minus one pixel: a bigger margin made a line that just fits count as wrapped, and the bubble got one empty line too many
         var textWidth = Math.Max(20, listWidth - 12 - 16 - 1);
         var used = 0;
@@ -315,7 +458,7 @@ internal sealed class ChatPanel
                 for (var i = entries.Count - 1; i >= 0; i--)
                 {
                     var e = entries[i];
-                    Lay(Take(used++), e.Line.Name, e.Body, Color.white, y, listWidth, e.BodyHeight, NameLine(e.Line), IsSystem(e.Line) ? "" : e.Line.Text, e.Line.Links, IsSystem(e.Line) ? Brief : Color.white, e.Line.Self);
+                    Lay(Take(used++), e.Line.Name, e.Body, Color.white, y, listWidth, e.BodyHeight, NameLine(e.Line), IsSystem(e.Line) ? "" : e.Line.Text, e.Line.Links, IsSystem(e.Line) ? Brief : Color.white, e.Line.Self, e.Line);
                     y += e.Box + _gap + 4;
                 }
             }
@@ -365,7 +508,7 @@ internal sealed class ChatPanel
                 {
                     var top = bottom - e.Box;
                     if (top < _h && bottom > 0)
-                        Lay(Take(used++), e.Line.Name, e.Body, Color.white, top, listWidth, e.BodyHeight, NameLine(e.Line), IsSystem(e.Line) ? "" : e.Line.Text, e.Line.Links, IsSystem(e.Line) ? Brief : Color.white, e.Line.Self);
+                        Lay(Take(used++), e.Line.Name, e.Body, Color.white, top, listWidth, e.BodyHeight, NameLine(e.Line), IsSystem(e.Line) ? "" : e.Line.Text, e.Line.Links, IsSystem(e.Line) ? Brief : Color.white, e.Line.Self, e.Line);
                     bottom = top - _gap - 4;
                     if (bottom < -2) break;
                 }
@@ -522,6 +665,13 @@ internal sealed class ChatPanel
         // data); otherwise the card is asked for by the item id
         var link = bubble.Links[index];
         var name = link.Token.Length > 0 ? link.Token : link.Name;
+        // best: the game's own data of this message (kept in its chat data whatever channel its windows show), opened the way its chat link does
+        if (bubble.Source != null && ItemLink.Open(bubble.Source.Channel, bubble.Source.MsgId, link.ItemId))
+        {
+            ItemCardMover.Request(screenPoint);
+            return;
+        }
+
         if (GameChatUi.ClickItemLink(bubble.Who, name))
         {
             ItemCardMover.Request(screenPoint); // the game opens the card at its own bubble: it is moved to where the user pressed
@@ -540,9 +690,10 @@ internal sealed class ChatPanel
     }
 
     int _stickerSeen;
-    /// <summary>A click on a name: the game's own card of that character opens (through the game's chat bubble of that person).</summary>
+    /// <summary>A click on a name: the game's own card of that character opens, by the character's id (a line without an id falls back to the game's chat bubble of that person).</summary>
     void OpenCard(Bubble bubble)
     {
+        if (bubble.CharId != 0 && IdCard.Open(bubble.CharId)) return;
         if (bubble.Who.Length > 0) GameChatUi.OpenCard(bubble.Who);
     }
 
@@ -582,6 +733,14 @@ internal sealed class ChatPanel
 
         }
 
+        DevTools.Tick();
+        ShowSendResult();
+        if (_pickerOpen && (_pickerSeen != RecentStickers.Version || _stickerVersionSeen != StickerCache.Version || Time.realtimeSinceStartup >= _pickerNext))
+        {
+            _pickerNext = Time.realtimeSinceStartup + 0.5f; // also while the client's list of pictures is still being read
+            PaintPicker();
+        }
+
         if (_tabSeen != TabIcons.Version)
         {
             _tabSeen = TabIcons.Version; // the game's tab pictures just arrived
@@ -599,8 +758,10 @@ internal sealed class ChatPanel
         _copied = null;
     }
 
-    void Lay(Bubble bubble, string name, string body, Color color, double top, double listWidth, double bodyHeight, string nameText, string original, List<ChatLinkDto> links = null, Color? ink = null, bool mine = false)
+    void Lay(Bubble bubble, string name, string body, Color color, double top, double listWidth, double bodyHeight, string nameText, string original, List<ChatLinkDto> links = null, Color? ink = null, bool mine = false, ChatLineDto source = null)
     {
+        bubble.Source = source;
+        var charId = source?.CharId ?? 0;
         bubble.Links = links ?? NoLinks;
         var nameHeight = string.IsNullOrEmpty(nameText) ? 0 : _size * 1.3;
         var itemRow = ItemRowHeight(bubble.Links);
@@ -619,7 +780,7 @@ internal sealed class ChatPanel
         UiKit.SetText(bubble.Name, nameText);
         UiKit.Place(bubble.Name.gameObject, 6 + 8, top + Pad, width - 16 - copyRoom, nameHeight);
         bubble.Who = name ?? "";
-        bubble.NameHit.SetActive(nameHeight > 0 && bubble.Who.Length > 0);
+        bubble.NameHit.SetActive(nameHeight > 0 && (bubble.Who.Length > 0 || charId != 0));
         UiKit.Place(bubble.NameHit, 6 + 8, top + Pad, width - 16 - copyRoom, nameHeight);
         var stickerName = StickerCache.NameOf(original);
         var stickerTexture = StickerCache.Get(stickerName);
@@ -655,6 +816,8 @@ internal sealed class ChatPanel
         public readonly GameObject CopyBox;
         public readonly GameObject NameHit; // a click on the name opens the character's card
         public string Who = "";
+        public long CharId => Source?.CharId ?? 0;
+        public ChatLineDto Source;
         public readonly Image CopyBack;
         public string Original = "";
         public List<ChatLinkDto> Links = NoLinks;

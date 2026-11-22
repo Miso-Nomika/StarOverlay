@@ -11,6 +11,8 @@
     <DebugType>none</DebugType>
     <CheckEolTargetFramework>false</CheckEolTargetFramework>
     <NoWarn>$(NoWarn);NETSDK1138;CS8981</NoWarn>
+    <!-- a development build (build/release.ps1 -Dev) carries the tools of DevTools.cs; a release build does not -->
+    <DefineConstants Condition="'$(DevTools)' == 'true'">$(DefineConstants);DEV_TOOLS</DefineConstants>
     <!-- assemblies the game generated on its first run with the loader (build\collect-interop.ps1) -->
     <GameRefs Condition="'$(GameRefs)' == ''">$(MSBuildThisFileDirectory)..\..\artifacts\ingame-refs</GameRefs>
   </PropertyGroup>
@@ -34,6 +36,8 @@
     <Reference Include="UnityEngine.ImageConversionModule"><HintPath>$(GameRefs)\interop\UnityEngine.ImageConversionModule.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="Unity.TextMeshPro"><HintPath>$(GameRefs)\interop\Unity.TextMeshPro.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="Panda.Script"><HintPath>$(GameRefs)\interop\Panda.Script.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="ZResources"><HintPath>$(GameRefs)\interop\ZResources.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="ZLuaFramework"><HintPath>$(GameRefs)\interop\ZLuaFramework.dll</HintPath><Private>false</Private></Reference>
   </ItemGroup>
 
   <ItemGroup>

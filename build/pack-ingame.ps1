@@ -3,7 +3,7 @@
 #   build\pack-ingame.ps1 -NoAgent            first run on a PC: loader only, so the game can generate its interop assemblies
 #   build\collect-interop.ps1 -Game <folder>  copies those assemblies to artifacts\ingame-refs (needed to compile the agent)
 #   build\pack-ingame.ps1                     full package with the agent
-param([switch]$NoAgent)
+param([switch]$NoAgent, [switch]$Dev) # -Dev: a development build with the tools of src\StarOverlay.Ingame\DevTools.cs (never for a release)
 $ErrorActionPreference = 'Stop'
 $userDotnet = Join-Path $env:USERPROFILE '.dotnet'
 if (Test-Path (Join-Path $userDotnet 'dotnet.exe')) { $env:PATH = "$userDotnet;$env:PATH"; $env:DOTNET_ROOT = $userDotnet } # a per-user SDK wins over a runtime-only install
@@ -34,7 +34,8 @@ Copy-Item (Join-Path $root 'src\StarOverlay.Ingame\Icons\*.png') (Join-Path $pac
 
 $agentHash = 'noagent'
 if (-not $NoAgent) {
-    dotnet build (Join-Path $root 'src\StarOverlay.Ingame\StarOverlay.Ingame.csproj') -c Release -o (Join-Path $art 'agent-build')
+    $devFlag = if ($Dev) { '-p:DevTools=true' } else { '-p:DevTools=false' }
+    dotnet build (Join-Path $root 'src\StarOverlay.Ingame\StarOverlay.Ingame.csproj') -c Release $devFlag -o (Join-Path $art 'agent-build')
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
     Copy-Item (Join-Path $art 'agent-build\StarOverlay.Ingame.dll'), (Join-Path $art 'agent-build\StarOverlay.Ingame.Protocol.dll') (Join-Path $package 'agent')
     $agentHash = (Get-FileHash (Join-Path $package 'agent\StarOverlay.Ingame.dll') -Algorithm SHA256).Hash.Substring(0, 12)

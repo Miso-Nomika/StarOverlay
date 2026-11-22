@@ -4,7 +4,7 @@
 #   ingame\   BepInEx loader + our in-game agent + font + icons + Unity libraries
 #   plugins\  the standard plugins (dps.meter, chat, party.join, buff.tracker)
 # Needs: the game's interop assemblies in artifacts\ingame-refs (build\collect-interop.ps1 on a PC with the game, once).
-param([string]$Version = '0.4.8')
+param([string]$Version = '0.4.9', [switch]$Dev)
 $ErrorActionPreference = 'Stop'
 $userDotnet = Join-Path $env:USERPROFILE '.dotnet'
 if (Test-Path (Join-Path $userDotnet 'dotnet.exe')) { $env:PATH = "$userDotnet;$env:PATH"; $env:DOTNET_ROOT = $userDotnet } # a per-user SDK wins over a runtime-only install
@@ -18,7 +18,7 @@ if (Test-Path $payload) { Remove-Item $payload -Recurse -Force }
 New-Item -ItemType Directory -Force $payload, $release | Out-Null
 
 Write-Host '== in-game package'
-Run { & (Join-Path $PSScriptRoot 'pack-ingame.ps1') }
+Run { & (Join-Path $PSScriptRoot 'pack-ingame.ps1') -Dev:$Dev }
 Copy-Item (Join-Path $art 'ingame-package') (Join-Path $payload 'ingame') -Recurse
 
 Write-Host '== receiving helper'

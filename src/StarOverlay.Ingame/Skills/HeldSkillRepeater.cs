@@ -42,9 +42,12 @@ static class HeldSkillRepeater
         public object Controller; // a PlayerInputController (kept as object: its base type lives in an assembly the agent does not reference); what the game was given for this key down: handing it over again makes the game find the skill the key means NOW
         public object Args;       // the InputActionEventArgs of that key down
         public int Slot;
+        public int ActionId; // the key's action of its key down: the key up of the same action ends the hold
         public int Skill;
         public bool Repeat;
         public float Since;
+        public KeyCode[] Keys = Array.Empty<KeyCode>(); // the physical keys / mouse buttons that went down with this press: the hold lasts only while one of them is down
+        public float NoKeySince = -1f;
     }
 
     // what is learned from the keys that went through: the slot and the skill id (the game's real one, a combo changes it) of a skill's data object
@@ -62,6 +65,7 @@ static class HeldSkillRepeater
     static readonly List<Hold> PressHolds = new(); // the holds made while the game handled the key that was just pressed
     static Hold _target;                     // the key that was repeated at the last look
     static float _next;
+    static KeyCode[] _allKeys;
 
     static readonly Dictionary<int, float> Reported = new();
 
@@ -88,6 +92,7 @@ static class HeldSkillRepeater
         {
             var harmony = new Harmony("staroverlay.skillrepeat");
             Hook(harmony, typeof(PlayerInputController), "processAttacksPressed", nameof(BeforeKeyDown), nameof(AfterKeyDown));
+            Hook(harmony, typeof(PlayerInputController), "processAttacksReleased", nameof(BeforeKeyUp));
             Hook(harmony, typeof(ZSkillInputMgr), "FirePlaySkillEvent", nameof(BeforeFire));
             Hook(harmony, typeof(ZSkillInputMgr), "updateSlotPress", nameof(BeforeSlotPress));
             Hook(harmony, typeof(ZSkillInputMgr), "cacheInput", nameof(BeforeRelease));
@@ -117,6 +122,23 @@ static class HeldSkillRepeater
         PressHolds.Clear();
     }
 
+    // the real key up: the hold of that key ends. The game's own release of a slot (cacheInput) does not come when the game turned the press down
+    // (e.g. gliding), so without this a key let go in the air would be repeated on after landing
+    static void BeforeKeyUp(PlayerInputController __instance, InputActionEventArgs inputActionEventData)
+    {
+        if (_repeating || Held.Count == 0) return;
+        try
+        {
+            // only a hold whose physical key is unknown ends here, by the action of the key up. The others end when their own key is up (Tick): the slot the
+            // controller names at a key up is the one pressed LAST, so a key let go just after the next one was pressed must not end the next one
+            var action = inputActionEventData == null ? 0 : inputActionEventData.ActionId;
+            if (action != 0) Held.RemoveAll(hold => hold.Keys.Length == 0 && hold.ActionId == action);
+        }
+        catch (Exception)
+        {
+        }
+    }
+
     // the game says which slot the pressed key is (AttackPressIdx, the same number as the slot of updateSlotPress), also when it cannot use the skill now:
     // that is the key's identity for the release. A press that is no skill key (nothing pressed, no slot) does not hold anything.
     static void AfterKeyDown(PlayerInputController __instance)
@@ -126,11 +148,12 @@ static class HeldSkillRepeater
         {
             var slot = __instance.AttackPressIdx;
             var pressing = __instance.IsAttackPress;
+            var keysDown = pressing && slot > 0 ? KeysPressedThisFrame() : Array.Empty<KeyCode>();
             if (pressing && slot > 0 && PressHolds.Count == 0)
             {
                 // the game turned the key down before it looked for the skill (e.g. in the air): the key is held all the same, so it is tried again until the game takes it
                 SkillOfSlot.TryGetValue(slot, out var known);
-                var waiting = new Hold { Controller = __instance, Args = _pressArgs, Slot = slot, Skill = known, Repeat = known > 0 ? _skills.Contains(known) : _skills.Count > 0, Since = Time.realtimeSinceStartup }; // a slot never taken before has no known skill: it is tried, and a skill that is not switched on is stopped when the game gives it
+                var waiting = new Hold { Controller = __instance, Args = _pressArgs, ActionId = ActionOf(_pressArgs), Keys = keysDown, Slot = slot, Skill = known, Repeat = known > 0 ? _skills.Contains(known) : _skills.Count > 0, Since = Time.realtimeSinceStartup }; // a slot never taken before has no known skill: it is tried, and a skill that is not switched on is stopped when the game gives it
                 Held.RemoveAll(other => other.Slot == slot);
                 Held.Add(waiting);
             }
@@ -146,6 +169,8 @@ static class HeldSkillRepeater
                 hold.Slot = slot;
                 hold.Controller = __instance;
                 hold.Args = _pressArgs;
+                hold.ActionId = ActionOf(_pressArgs);
+                hold.Keys = keysDown;
                 Held.RemoveAll(other => !ReferenceEquals(other, hold) && other.Slot == slot); // an older hold of the same key is replaced
             }
         }
@@ -192,6 +217,43 @@ static class HeldSkillRepeater
         }
 
         return true;
+    }
+
+    /// <summary>The keys and mouse buttons that went down in this frame (the press the game is handling now).</summary>
+    static KeyCode[] KeysPressedThisFrame()
+    {
+        try
+        {
+            _allKeys ??= (KeyCode[])Enum.GetValues(typeof(KeyCode));
+            var down = new List<KeyCode>();
+            foreach (var key in _allKeys)
+                if (key != KeyCode.None && Input.GetKeyDown(key)) down.Add(key);
+            return down.ToArray();
+        }
+        catch (Exception)
+        {
+            return Array.Empty<KeyCode>();
+        }
+    }
+
+    static bool IsStillDown(Hold hold)
+    {
+        if (hold.Keys.Length == 0) return Input.anyKey; // the key could not be told: at least some key must be down
+        foreach (var key in hold.Keys)
+            if (Input.GetKey(key)) return true;
+        return false;
+    }
+
+    static int ActionOf(object args)
+    {
+        try
+        {
+            return args is InputActionEventArgs typed ? typed.ActionId : 0;
+        }
+        catch (Exception)
+        {
+            return 0;
+        }
     }
 
     static void AddHold(Hold hold)
@@ -269,10 +331,27 @@ static class HeldSkillRepeater
     public static void Tick()
     {
         if (Held.Count == 0) return;
+
         var now = Time.realtimeSinceStartup;
         if (!_active || !Application.isFocused)
         {
             Stop();
+            return;
+        }
+
+        // a hold lasts only while its own key or mouse button is physically down. What the game did not tell us (a key let go while the character was
+        // dead or the input was cut off) must not be repeated on. A short moment of grace covers the frame of the press itself.
+        foreach (var hold in Held.ToArray())
+        {
+            if (IsStillDown(hold)) hold.NoKeySince = -1f;
+            else if (hold.Keys.Length > 0) Held.Remove(hold); // its own key is up: it ends at once
+            else if (hold.NoKeySince < 0f) hold.NoKeySince = now;
+            else if (now - hold.NoKeySince > 0.15f) Held.Remove(hold); // the key is unknown: no key at all for a moment
+        }
+
+        if (Held.Count == 0)
+        {
+            _target = null;
             return;
         }
 

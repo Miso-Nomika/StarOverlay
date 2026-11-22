@@ -21,7 +21,7 @@ public sealed class SkillRepeatPlugin : IPlugin
     private RepeatModel? _model;
     private Timer? _poll;
 
-    public PluginInfo Info { get; } = new("skill.repeat", "연속 입력", "0.4.8");
+    public PluginInfo Info { get; } = new("skill.repeat", "연속 입력", "0.4.9");
 
     public void Load(IPluginContext context)
     {

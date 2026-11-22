@@ -1,8 +1,7 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
-using System.Text.RegularExpressions;
+using System.Linq;
 using StarOverlay.Ingame.Protocol;
-using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -14,7 +13,6 @@ namespace StarOverlay.Ingame.Ui;
 /// </summary>
 static class StickerCache
 {
-    static readonly Regex Tags = new("<[^>]+>", RegexOptions.Compiled);
     static readonly Dictionary<string, Texture2D> _textures = new();
     static float _next;
 
@@ -37,64 +35,75 @@ static class StickerCache
         {
             var lines = GameChatUi.Lines;
             if (lines == null) return;
-            var wanted = new List<ChatLineDto>();
+            var wanted = new List<string>();
             foreach (var line in lines)
             {
                 var name = NameOf(line.Text);
-                if (name != null && Get(name) == null) wanted.Add(line);
+                if (name != null && Get(name) == null) wanted.Add(name);
             }
 
             if (wanted.Count == 0) return;
-            var chat = GameChatUi.FindChat();
-            if (chat == null) return;
-            var list = GameChatUi.Find(chat, "node_dialogue");
-            var content = list == null ? null : GameChatUi.Find(list, "node_content");
-            if (content == null) return;
-
-            // the picture bubbles of the game's list, oldest first as the game orders them on screen
-            var bubbles = new List<(Transform Node, float Y)>();
-            for (var i = 0; i < content.childCount; i++)
-            {
-                var node = content.GetChild(i);
-                if (node.gameObject.activeSelf && node.name.Contains("_picture")) bubbles.Add((node, node.position.y));
-            }
-
-            bubbles.Sort((a, b) => b.Y.CompareTo(a.Y)); // top of the screen first = oldest first
-            var copiedAny = false;
-            var pictures = new List<(string Who, RawImage Image)>();
-            foreach (var (node, _) in bubbles)
-            {
-                var image = GameChatUi.Find(node, "rimg_pic")?.GetComponent<RawImage>();
-                if (image == null || image.texture == null) continue;
-                var who = GameChatUi.Find(node, "lab_name")?.GetComponent<TMP_Text>();
-                pictures.Add((who == null ? "" : Squash(Tags.Replace(who.text ?? "", "")), image));
-                var byName = StickerPairing.FindName(image.texture.name);
-                if (byName != null && Get(byName) == null && Copy(byName, image)) copiedAny = true; // the texture carries the sticker name
-            }
-
-            // otherwise pair them by order: the newest picture bubble with the newest picture line of the same sender. All picture lines take
-            // their turn, also the ones that already have their picture: their bubbles are still in the game's list and must not be given away
-            var allNewestFirst = new List<ChatLineDto>();
-            foreach (var line in lines)
-                if (NameOf(line.Text) != null) allNewestFirst.Add(line);
-            allNewestFirst.Reverse();
-            var paired = StickerPairing.Pair(
-                allNewestFirst.ConvertAll(line => Squash(line.Name)),
-                pictures.ConvertAll(picture => picture.Who));
-            for (var i = 0; i < allNewestFirst.Count; i++)
-            {
-                if (paired[i] < 0) continue;
-                var name = NameOf(allNewestFirst[i].Text);
-                if (Get(name) == null && Copy(name, pictures[paired[i]].Image)) copiedAny = true;
-            }
-
-            if (copiedAny) Version++;
+            // the picture file of the client is loaded by its name (no chat bubble of the game is needed)
+            StickerLoader.Prepare();
+            StickerLoader.Watch();
+            foreach (var name in wanted) StickerLoader.Request(name);
         }
         catch (Exception e)
         {
             Plugin.L.LogWarning("sticker cache: " + e.Message);
         }
     }
+
+    // The series parts of the stickers seen so far, per pack (the "8" of 118010 for the texture sticker_3_11): the first ones were seen in the game, the
+    // rest is learned from the stickers copied or loaded. They tell two pictures apart that both fit a name (emoji_2_266019: emoji_2_2 would be series "66").
+    static readonly Dictionary<string, HashSet<string>> SeriesOfPack = new()
+    {
+        ["emoji_2"] = ["12", "6"], ["sticker_1"] = ["3"], ["sticker_3"] = ["8"], ["sticker_4"] = ["9"], ["sticker_5"] = ["10"],
+        ["sticker_7"] = ["11"], ["sticker_16"] = ["15"], ["sticker_17"] = ["17"], ["sticker_18"] = ["18"],
+    };
+
+    /// <summary>The name of the game's picture a sticker was copied from (null when not copied in this session).</summary>
+    internal static string TextureOfName(string code) => code != null && _textureOfName.TryGetValue(code, out var texture) ? texture : null;
+
+    internal static void RememberTexture(string code, string texture) => _textureOfName[code] = texture;
+
+    internal static bool SeriesKnown(string code, string series)
+    {
+        var pack = StickerPairing.PackOf(code);
+        return pack != null && series != null && SeriesOfPack.TryGetValue(pack, out var known) && known.Contains(series);
+    }
+
+    internal static void LearnSeries(string code, string texture)
+    {
+        var pack = StickerPairing.PackOf(code);
+        var series = StickerPairing.SeriesOf(code, texture);
+        if (pack == null || series == null) return;
+        if (!SeriesOfPack.TryGetValue(pack, out var known)) SeriesOfPack[pack] = known = new HashSet<string>();
+        known.Add(series);
+    }
+    static readonly Dictionary<string, string> _textureOfName = new(); // sticker name -> the texture it was copied from
+
+#if DEV_TOOLS
+    static string _lastDiag;
+    static int _diagBlocks;
+#endif
+
+    /// <summary>Development log (bpsr\state\sticker-diag.txt). A release build (DEV_TOOLS is not defined) has neither the calls nor the writer.</summary>
+    [System.Diagnostics.Conditional("DEV_TOOLS")]
+    internal static void Diag(string text)
+    {
+#if DEV_TOOLS
+        if (text == _lastDiag || _diagBlocks >= 400) return;
+        _lastDiag = text;
+        _diagBlocks++;
+        var folder = System.IO.Path.Combine(Plugin.GameRoot, "bpsr", "state");
+        System.IO.Directory.CreateDirectory(folder);
+        System.IO.File.AppendAllText(System.IO.Path.Combine(folder, "sticker-diag.txt"), $"--- {DateTime.Now:HH:mm:ss.fff}\n{text}");
+#endif
+    }
+
+    /// <summary>Copies the picture a RawImage shows into the cache under a sticker name (for the loader).</summary>
+    internal static bool CopyFrom(string name, RawImage source) => Get(name) != null || Copy(name, source);
 
     static bool Copy(string name, RawImage source)
     {
@@ -122,5 +131,4 @@ static class StickerCache
         }
     }
 
-    static string Squash(string text) => Regex.Replace(text ?? "", @"\s+", "");
 }

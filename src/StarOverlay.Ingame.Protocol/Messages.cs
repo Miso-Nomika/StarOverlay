@@ -378,6 +378,12 @@ public sealed class ChatLineDto
 
     /// <summary>Said by the player themself: the window shows these lines on the right.</summary>
     public bool Self { get; set; }
+
+    /// <summary>The sender's character id (0 = not known): the game's own card of that character is opened with it.</summary>
+    public long CharId { get; set; }
+
+    /// <summary>The game's id of the message inside its channel (0 = not known): the game's own data of the message (an item link's full data) is found with it.</summary>
+    public long MsgId { get; set; }
 }
 
 public sealed class ChatLinkDto
@@ -557,6 +563,9 @@ public sealed class RecordBuffDto
 public sealed class RecordPlayerDto
 {
     public long CharId { get; set; }
+
+    /// <summary>The game's id of the message inside its channel (0 = not known): the game's own data of the message (an item link's full data) is found with it.</summary>
+    public long MsgId { get; set; }
 
     public string Name { get; set; } = "";
 

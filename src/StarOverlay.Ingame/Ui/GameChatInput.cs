@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
+using UnityEngine.Events;
 using UnityEngine.UI;
 
 namespace StarOverlay.Ingame.Ui;
@@ -34,6 +35,10 @@ static class GameChatInput
     static GameObject _badge;
     static Image _badgeBack;
     static TextMeshProUGUI _badgeText;
+    static float _badgeFailUntil;
+
+    /// <summary>The badge flashes red for a moment (the world channel could not be changed).</summary>
+    internal static void FlashBadgeRed() => _badgeFailUntil = Time.realtimeSinceStartup + 1.2f;
 
     /// <summary>
     /// Our chat window is on, not counting the switch of the whole canvas (that one only follows whether the game shows its chat bar):
@@ -55,6 +60,7 @@ static class GameChatInput
             var ours = Anchor != null && Shown(Anchor);
             var wantHide = ours;
             var wantInput = ours;
+            FullChatChannel.Update(ours);
             if (!wantHide && _listHidden)
             {
                 ShowList();
@@ -74,7 +80,6 @@ static class GameChatInput
             {
                 HideList(chat);
                 _listHidden = true;
-                KeepAllTab(chat);
             }
 
             if (wantInput)
@@ -126,51 +131,6 @@ static class GameChatInput
         }
 
         _hidden.Clear();
-    }
-
-    // ---- the channel tab of the game's chat: always "전체"
-
-    static float _nextTab;
-    static int _tabClicks;
-
-    /// <summary>
-    /// The game shows only the chosen channel's lines (and the pictures in them); the up/down keys change that channel. While our
-    /// chat window is used the first tab ("전체") is kept selected, so every channel's lines and pictures are drawn by the game.
-    /// </summary>
-    static void KeepAllTab(Transform chat)
-    {
-        if (Time.realtimeSinceStartup < _nextTab) return;
-        _nextTab = Time.realtimeSinceStartup + 0.5f;
-        var content = GameChatUi.Find(GameChatUi.Find(chat, "loop_channel"), "content");
-        if (content == null) return;
-        var tabs = new List<(Transform Node, float Y)>();
-        for (var i = 0; i < content.childCount; i++)
-        {
-            var node = content.GetChild(i);
-            if (node.gameObject.activeSelf && node.name.StartsWith("main_chat_channel_tpl_pc", StringComparison.Ordinal)) tabs.Add((node, node.position.y));
-        }
-
-        if (tabs.Count == 0) return;
-        tabs.Sort((a, b) => b.Y.CompareTo(a.Y)); // the top one is "전체"
-        var selected = -1;
-        for (var i = 0; i < tabs.Count; i++)
-        {
-            var on = GameChatUi.Find(tabs[i].Node, "group_on");
-            var group = on == null ? null : on.GetComponent<CanvasGroup>();
-            var shown = on != null && on.gameObject.activeInHierarchy && (group == null || group.alpha > 0.5f);
-            if (shown && selected < 0) selected = i;
-        }
-
-        if (selected == 0)
-        {
-            _tabClicks = 0; // it worked: the safety below counts clicks that did not
-            return;
-        }
-
-        if (_tabClicks++ >= 40) return; // never loop forever if the click does not work
-        var first = tabs[0].Node.gameObject;
-        var data = new UnityEngine.EventSystems.PointerEventData(UnityEngine.EventSystems.EventSystem.current);
-        UnityEngine.EventSystems.ExecuteEvents.Execute(first, data, UnityEngine.EventSystems.ExecuteEvents.pointerClickHandler);
     }
 
     // ---- the input bar
@@ -242,8 +202,11 @@ static class GameChatInput
         {
             var root = anchor.GetComponentInParent<Canvas>().rootCanvas.transform;
             _badge = UiKit.Node("WorldBadge", root);
-            _badgeBack = UiKit.Box("Back", _badge.transform, Color.white);
+            _badgeBack = UiKit.Box("Back", _badge.transform, Color.white, raycast: true);
             UiKit.Stretch(_badgeBack.gameObject);
+            // pressing the badge opens the number pad for the world channel (above it)
+            var press = _badgeBack.gameObject.AddComponent<Button>();
+            press.onClick.AddListener((UnityAction)(() => ChannelKeypad.Toggle(_badge.transform.parent)));
             _badgeText = UiKit.Text("Text", _badge.transform, 18, Color.white, TextAlignmentOptions.Center);
             _badgeText.enableWordWrapping = false;
             UiKit.Stretch(_badgeText.gameObject);
@@ -253,7 +216,7 @@ static class GameChatInput
         _badge.transform.SetAsLastSibling();
         var known = WorldNumber > 0;
         // small and quiet: a dark chip with soft orange letters (grey while the number is not known)
-        _badgeBack.color = new Color(0.17f, 0.15f, 0.12f, 0.92f);
+        _badgeBack.color = Time.realtimeSinceStartup < _badgeFailUntil ? new Color(0.7f, 0.2f, 0.2f, 0.95f) : new Color(0.17f, 0.15f, 0.12f, 0.92f);
         _badgeText.color = known ? new Color(1f, 0.78f, 0.45f, 1f) : new Color(0.62f, 0.64f, 0.7f, 1f);
         UiKit.SetText(_badgeText, known ? $"월드 ch{WorldNumber}" : "월드 ch?");
         var box = ScreenBox(back);
@@ -263,6 +226,7 @@ static class GameChatInput
         var x = (ours.Right - 3f * scale - BadgeWidth * scale) / scale;
         var y = (Screen.height - (barTop - 1f * scale)) / scale;
         UiKit.Place(_badge, x, y, BadgeWidth, heightRef);
+        ChannelKeypad.Follow(x, y);
     }
 
     const float Gap = 4f; // a few pixels of air between our window and the bar
@@ -291,6 +255,7 @@ static class GameChatInput
         var ours = ScreenBox(WindowOf(anchor)); // the whole window (its lower edge), not just the chat area inside it
         var scale = Math.Max(0.1f, anchor.GetComponentInParent<Canvas>().rootCanvas.scaleFactor);
         FitWidth(parts, ours, BadgeWidth * scale, SideInset * scale);
+        PlaceNotice(chat, ours, scale, canvasRect, camera);
 
         // the bar's current box on the screen (the grey bar and the input field; the channel pop-up list is left out)
         float left = float.MaxValue, bottom = float.MaxValue, top = float.MinValue;
@@ -321,6 +286,29 @@ static class GameChatInput
         KeepImeInLine(parts, scale);
 
         _barMoved = true;
+    }
+
+    /// <summary>
+    /// The game's notice lines (node_info: a friend's message and the system notice, mail included) sit just above its chat. Our window can cover them,
+    /// so while it is shown they are moved to its upper edge (left aligned). They are put back with the input bar when our window goes away.
+    /// </summary>
+    static void PlaceNotice(Transform chat, (float Left, float Bottom, float Right, float Top) ours, float scale, RectTransform canvasRect, Camera camera)
+    {
+        var info = GameChatUi.Find(chat, "node_info");
+        if (info == null) return;
+        var reference = GameChatUi.Find(info, "img_system") ?? GameChatUi.Find(info, "img_friend");
+        var referenceRect = reference == null ? null : reference.GetComponent<RectTransform>();
+        if (referenceRect == null) return;
+        var box = ScreenBox(referenceRect);
+        var height = box.Top - box.Bottom;
+        var wantBottom = Math.Min(ours.Top + Gap * scale, Screen.height - height); // above our window, but never out of the screen
+        var dx = ours.Left - box.Left;
+        var dy = wantBottom - box.Bottom;
+        if (Math.Abs(dx) < 0.5f && Math.Abs(dy) < 0.5f) return;
+        RectTransformUtility.ScreenPointToWorldPointInRectangle(canvasRect, new Vector2(box.Left, box.Bottom), camera, out var worldFrom);
+        RectTransformUtility.ScreenPointToWorldPointInRectangle(canvasRect, new Vector2(box.Left + dx, box.Bottom + dy), camera, out var worldTo);
+        if (!_moved.ContainsKey(info)) _moved[info] = info.position; // where the game had it, to put it back
+        info.position += worldTo - worldFrom;
     }
 
     // The letters being composed and the suggestion list of the system's input method are drawn by the system from the point the game gives it
@@ -367,6 +355,7 @@ static class GameChatInput
     static void RestoreBar()
     {
         if (_badge != null) _badge.SetActive(false);
+        ChannelKeypad.Close();
         foreach (var pair in _moved)
             if (pair.Key != null) pair.Key.position = pair.Value;
         _moved.Clear();

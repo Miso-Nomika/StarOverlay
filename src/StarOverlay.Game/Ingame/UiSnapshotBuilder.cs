@@ -335,6 +335,8 @@ public sealed class UiSnapshotBuilder(IIngameHooks hooks, LayoutStore layouts)
         World = line.World,
         Time = line.At.ToString("HH:mm"),
         Self = line.Self,
+        CharId = line.CharId,
+        MsgId = line.MsgId,
         Links = (line.Links ?? []).Select(link =>
         {
             var item = ItemBook.Find(link.ItemId);

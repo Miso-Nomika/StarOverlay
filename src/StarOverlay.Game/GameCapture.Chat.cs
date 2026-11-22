@@ -37,7 +37,7 @@ public sealed partial class GameCapture
             if (message?.MsgInfo == null) return;
             var (text, links) = ChatItems.Compose(message.MsgInfo);
             var name = message.SendCharInfo?.Name ?? "";
-            LiveChat.Add(message.MsgId, LiveChat.ChannelName((int)request!.ChannelType), name, text, links: links, self: IsMine(message.SendCharInfo));
+            LiveChat.Add(message.MsgId, LiveChat.ChannelName((int)request!.ChannelType), name, text, links: links, self: IsMine(message.SendCharInfo), charId: message.SendCharInfo?.CharID ?? 0);
         }
         catch (Exception ex)
         {
@@ -121,7 +121,7 @@ public sealed partial class GameCapture
             foreach (var message in reply.MultiMsgList)
             {
                 if (message?.MsgInfo == null) continue;
-                if (LiveChat.Add(message.MsgId, channel, message.SendCharInfo?.Name ?? "", ChatItems.Compose(message.MsgInfo).Text, SaidAt(message.Timestamp), links: ChatItems.Compose(message.MsgInfo).Links, self: IsMine(message.SendCharInfo))) added++;
+                if (LiveChat.Add(message.MsgId, channel, message.SendCharInfo?.Name ?? "", ChatItems.Compose(message.MsgInfo).Text, SaidAt(message.Timestamp), links: ChatItems.Compose(message.MsgInfo).Links, self: IsMine(message.SendCharInfo), charId: message.SendCharInfo?.CharID ?? 0)) added++;
             }
 
         }

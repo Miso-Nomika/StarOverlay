@@ -8,7 +8,7 @@ $interop = Join-Path $Game 'BepInEx\interop'
 if (-not (Test-Path $interop)) { throw "No generated assemblies yet: start the game once with the loader installed ($interop)" }
 New-Item -ItemType Directory -Force (Join-Path $refs 'interop'), (Join-Path $refs 'core') | Out-Null
 $names = 'Il2Cppmscorlib', 'UnityEngine', 'UnityEngine.CoreModule', 'UnityEngine.UI', 'UnityEngine.UIModule', 'UnityEngine.TextCoreFontEngineModule',
-         'UnityEngine.TextRenderingModule', 'UnityEngine.InputLegacyModule', 'UnityEngine.ImageConversionModule', 'Unity.TextMeshPro', 'Assembly-CSharp', 'Panda.Script', 'Panda.AOT.SDKBridge'
+         'UnityEngine.TextRenderingModule', 'UnityEngine.InputLegacyModule', 'UnityEngine.ImageConversionModule', 'Unity.TextMeshPro', 'Assembly-CSharp', 'Panda.Script', 'Panda.AOT.SDKBridge', 'ZResources', 'ZLuaFramework'
 $ZRpc = 'ZRpc', 'ZNet'
 foreach ($n in $names + $ZRpc) { $p = Join-Path $interop "$n.dll"; if (Test-Path $p) { Copy-Item $p (Join-Path $refs 'interop') -Force } }
 Copy-Item (Join-Path $Game 'BepInEx\core\*.dll') (Join-Path $refs 'core') -Force
