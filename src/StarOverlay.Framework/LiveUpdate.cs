@@ -11,7 +11,6 @@ public static class LiveUpdate
     /// <summary>The page of the newest release (the in-game notice opens it).</summary>
     public const string ReleasePage = "https://github.com/Miso-Nomika/StarOverlay/releases/latest";
 
-    private static readonly TimeSpan Throttle = TimeSpan.FromHours(1);
     private static string _latest = "";
     private static string _current = "";
 
@@ -59,7 +58,6 @@ public static class LiveUpdate
             return false;
         }
 
-        if (state.CheckedAt is { } at && nowUtc - at < Throttle && nowUtc >= at) return false; // a restart of the service right after a check
         string? tag = null;
         try
         {

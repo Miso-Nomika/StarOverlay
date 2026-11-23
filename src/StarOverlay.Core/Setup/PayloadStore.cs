@@ -1,5 +1,8 @@
 ﻿using System.IO.Compression;
 using System.Reflection;
+using System.Text.Json;
+using StarOverlay.Core.Clients;
+using StarOverlay.Core.Mods;
 
 namespace StarOverlay.Core.Setup;
 
@@ -76,15 +79,45 @@ public static class PayloadStore
         return paths.IsComplete ? paths : null;
     }
 
+    /// <summary>
+    /// The build folders (names under <c>app</c>) that a game in the client list still starts its service from (its <c>service.json</c>): a game that was not
+    /// updated yet keeps working, and is switched over when the player installs on it.
+    /// </summary>
+    static HashSet<string> FoldersInUse(string dataRoot)
+    {
+        var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var app = Path.GetFullPath(Path.Combine(dataRoot, "app")).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        foreach (var client in ClientRosterStore.Load(Path.Combine(dataRoot, "clients.json")).Clients)
+        {
+            try
+            {
+                var file = IngameDeployer.ServicePath(client.InstallPath);
+                if (!File.Exists(file)) continue;
+                using var document = JsonDocument.Parse(File.ReadAllText(file));
+                if (!document.RootElement.TryGetProperty("host", out var host) || host.GetString() is not { Length: > 0 } exe) continue;
+                var full = Path.GetFullPath(exe);
+                if (!full.StartsWith(app, StringComparison.OrdinalIgnoreCase)) continue;
+                var name = full[app.Length..].Split(Path.DirectorySeparatorChar, 2)[0];
+                if (name.Length > 0) names.Add(name);
+            }
+            catch (Exception ex) when (ex is IOException or JsonException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+            {
+            }
+        }
+
+        return names;
+    }
+
     /// <summary>Deletes the unpacked folders of other builds. One that is still running or locked is simply left for next time.</summary>
     public static void RemoveOlder(string dataRoot, string keepId)
     {
         var parent = Path.Combine(dataRoot, "app");
         if (!Directory.Exists(parent)) return;
+        var inUse = FoldersInUse(dataRoot);
         foreach (var directory in Directory.GetDirectories(parent))
         {
             var name = Path.GetFileName(directory);
-            if (string.Equals(name, keepId, StringComparison.OrdinalIgnoreCase)) continue;
+            if (string.Equals(name, keepId, StringComparison.OrdinalIgnoreCase) || inUse.Contains(name)) continue;
             try
             {
                 Directory.Delete(directory, recursive: true);
