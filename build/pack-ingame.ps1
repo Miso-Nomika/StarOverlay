@@ -38,7 +38,9 @@ if (-not $NoAgent) {
     dotnet build (Join-Path $root 'src\StarOverlay.Ingame\StarOverlay.Ingame.csproj') -c Release $devFlag -o (Join-Path $art 'agent-build')
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
     Copy-Item (Join-Path $art 'agent-build\StarOverlay.Ingame.dll'), (Join-Path $art 'agent-build\StarOverlay.Ingame.Protocol.dll') (Join-Path $package 'agent')
-    $agentHash = (Get-FileHash (Join-Path $package 'agent\StarOverlay.Ingame.dll') -Algorithm SHA256).Hash.Substring(0, 12)
+    # the names and places of the game's picture files, read by the agent (the Steam client has no list of its own to read)
+    Copy-Item (Join-Path $root 'src\StarOverlay.Ingame\Data\addresses.txt') (Join-Path $package 'agent')
+    $agentHash = (Get-FileHash (Join-Path $package 'agent\StarOverlay.Ingame.dll') -Algorithm SHA256).Hash.Substring(0, 6) + (Get-FileHash (Join-Path $package 'agent\addresses.txt') -Algorithm SHA256).Hash.Substring(0, 6)
 }
 "be793-$agentHash" | Set-Content -Encoding ASCII (Join-Path $package 'package.id')
 Write-Host "package: $package  id: $(Get-Content (Join-Path $package 'package.id'))"

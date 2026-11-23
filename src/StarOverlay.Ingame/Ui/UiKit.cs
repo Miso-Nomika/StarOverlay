@@ -193,9 +193,36 @@ internal static class UiKit
         return sprite;
     }
 
-    /// <summary>A picture the plugin names as "file:<absolute path>" (a bundled or user PNG); null for anything else.</summary>
-    public static Sprite Picture(string reference) =>
-        !string.IsNullOrEmpty(reference) && reference.StartsWith("file:", StringComparison.Ordinal) ? LoadSprite(reference.Substring(5)) : null;
+    /// <summary>A picture the plugin names as "file:<absolute path>" (a bundled or user PNG) or "game:<address>" (a sprite of the game's own files); null for anything else (or while a game picture is loading).</summary>
+    public static Sprite Picture(string reference)
+    {
+        if (string.IsNullOrEmpty(reference)) return null;
+        if (reference.StartsWith("file:", StringComparison.Ordinal)) return LibraryPicture(reference.Substring(5));
+        if (reference.StartsWith("tex:", StringComparison.Ordinal)) return GameImages.Skill(reference.Substring(4));
+        if (reference.StartsWith("profession:", StringComparison.Ordinal))
+            return int.TryParse(reference.Substring(11), out var profession) ? GameImages.Profession(profession) : null;
+        return reference.StartsWith("game:", StringComparison.Ordinal) ? GameImages.Get(reference.Substring(5)) : null;
+    }
+
+    static readonly System.Collections.Generic.HashSet<string> MissingFiles = new();
+
+    /// <summary>
+    /// A picture of the plugins' library: the bundled PNG when there is one, otherwise the game's own picture file with the same name (most of the library is not
+    /// bundled any more: the game has those pictures). Null while the game's picture is loading and when there is none.
+    /// </summary>
+    public static Sprite LibraryPicture(string path)
+    {
+        if (Icons.TryGetValue(path, out var cached) && cached != null) return cached;
+        if (!MissingFiles.Contains(path))
+        {
+            if (File.Exists(path)) return LoadSprite(path);
+            MissingFiles.Add(path); // looked up once: a file that is not there is asked from the game from now on
+        }
+
+        var name = Path.GetFileNameWithoutExtension(path);
+        // the module pictures are sprites of one of the game's atlases, found by that address; the other library pictures are picture files found by name
+        return Path.GetFileName(Path.GetDirectoryName(path)) == "Modules" ? GameImages.Get("ui/atlas/mod_effect/" + name) : GameImages.Skill(name);
+    }
 
     /// <summary>Puts an icon image over a button (the button's own label is cleared).</summary>
     public static void SetIcon(TextMeshProUGUI label, Sprite sprite)

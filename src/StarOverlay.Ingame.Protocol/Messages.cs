@@ -39,6 +39,12 @@ public static class MessageType
     /// <summary>Service to agent: the skills to keep firing while their key is held and the repeat interval (an empty list stops the repeating).</summary>
     public const string Repeat = "repeat";
 
+    /// <summary>Service to agent: the quick preset plugin is on or off, and the preset the player asked to switch to (or a refresh).</summary>
+    public const string Preset = "preset";
+
+    /// <summary>Service to agent: the party join plugin is on or off, whose master scores the agent is to read, and the application the player accepted or rejected.</summary>
+    public const string Party = "party";
+
 
     /// <summary>Agent to service: the tables are saved (<c>Written</c> true: new files, read them again) or could not be (<c>Error</c>).</summary>
     public const string TablesDone = "tables-done";
@@ -64,6 +70,10 @@ public static class CommandAction
     public const string Copy = "copy";                  // chat: value = text for the clipboard
     public const string Channels = "channels";          // chat window: value = bit mask of the shown channels
     public const string Edit = "edit";                  // editor widget: window = plugin id, key = "<widget id>:<row key>", value = add, delete, up, down, field:<name> or set:<field>=<value>
+    public const string Presets = "presets";            // agent: window "quick.preset", value = the presets read from the game, one per line: "kind|id|name|state" (state: current, ready, empty, locked)
+    public const string PresetFailed = "preset-failed"; // agent: window "quick.preset", key = "kind:id" that could not be switched to, value = changed (unsaved changes in the game) or failed
+    public const string PartyScores = "party-scores";   // agent: window "party.join", value = master scores read from the game, one per line: "charId|score|shown" (shown 0 = the player keeps it private)
+    public const string PartyDealt = "party-dealt";     // agent: window "party.join", key = application id, value = ok (handed to the game) or failed
     public const string SettingsShown = "settings-shown"; // value = true/false: a settings window of this plugin is open in the game (the service may then read the graphics card)
 }
 
@@ -106,6 +116,37 @@ public sealed class Envelope
     /// <summary>With <see cref="MessageType.Repeat"/>.</summary>
     public RepeatDto? Repeat { get; set; }
 
+    /// <summary>With <see cref="MessageType.Preset"/>.</summary>
+    public PresetDto? Preset { get; set; }
+
+    /// <summary>With <see cref="MessageType.Party"/>.</summary>
+    public PartyDto? Party { get; set; }
+
+}
+
+/// <summary>The quick preset plugin: <see cref="Active"/>, and the newest request ("kind:id" or "refresh") with a number that grows on every request.</summary>
+public sealed class PresetDto
+{
+    public bool Active { get; set; }
+
+    public string Request { get; set; } = "";
+
+    public int Serial { get; set; }
+
+    /// <summary>The service has presets to show. False while it has none (it was just started, or the plugin was switched off and on): the agent then reads and sends them again.</summary>
+    public bool HaveItems { get; set; }
+}
+
+/// <summary>The party join plugin: <see cref="Active"/>, the characters whose master score is still unknown (<see cref="Need"/>), and the newest accept or reject ("accept:id" or "reject:id") with a number that grows on every request.</summary>
+public sealed class PartyDto
+{
+    public bool Active { get; set; }
+
+    public List<long> Need { get; set; } = [];
+
+    public string Request { get; set; } = "";
+
+    public int Serial { get; set; }
 }
 
 /// <summary>The skills to repeat while held (game skill ids) and the interval between two repeats in milliseconds.</summary>
@@ -227,6 +268,15 @@ public sealed class WidgetDto
     /// <summary>Icons widget: every row has a delete button; a press sends "icon-remove:&lt;key&gt;".</summary>
     public bool IconsRemovable { get; set; }
 
+    /// <summary>Icons widget (pressable list): the space between two rows in reference pixels (-1 = default).</summary>
+    public int IconGap { get; set; } = -1;
+
+    /// <summary>Icons widget (list in columns): the text size of the column titles (0 = default).</summary>
+    public int HeaderSize { get; set; }
+
+    /// <summary>Icons widget (list in columns): a short text at the right end of the title row.</summary>
+    public string Badge { get; set; } = "";
+
     public List<IconDto> Icons { get; set; } = [];
 
     public List<EditRowDto> EditRows { get; set; } = [];
@@ -275,6 +325,12 @@ public sealed class IconDto
     public int TimeAlpha { get; set; } = 100;
 
     public int StacksAlpha { get; set; } = 100;
+
+    /// <summary>The text at the end of a row of a pressable list (rich text); empty: the usual "켜짐"/"꺼짐" by <see cref="Dim"/>.</summary>
+    public string State { get; set; } = "";
+
+    /// <summary>The column of a pressable list the row stands in (rich text, shown above the column); empty: one column.</summary>
+    public string Group { get; set; } = "";
 }
 
 public sealed class EditFieldDto
@@ -340,6 +396,21 @@ public sealed class RowDto
     public string SyrupEffect { get; set; } = "";
 
     public List<ImagineDto> Imagines { get; set; } = [];
+
+    /// <summary>Buttons at the right end of the row; a press sends "row:&lt;key&gt;".</summary>
+    public List<RowActionDto> Actions { get; set; } = [];
+}
+
+public sealed class RowActionDto
+{
+    public string Label { get; set; } = "";
+
+    public string Key { get; set; } = "";
+
+    public int Color { get; set; }
+
+    /// <summary>"check" or "cross": drawn on the button instead of the label; empty = the label is the button's text.</summary>
+    public string Icon { get; set; } = "";
 }
 
 public sealed class ImagineDto
@@ -393,9 +464,6 @@ public sealed class ChatLinkDto
     public string Name { get; set; } = "";
 
     public int Quality { get; set; }
-
-    /// <summary>The picture name without folder and extension (the chat plugin's assets\items has the file), empty when unknown.</summary>
-    public string Icon { get; set; } = "";
 
     /// <summary>The text of this link inside <see cref="ChatLineDto.Text"/> ("[이름]"): the window turns it into the clickable part.</summary>
     public string Token { get; set; } = "";

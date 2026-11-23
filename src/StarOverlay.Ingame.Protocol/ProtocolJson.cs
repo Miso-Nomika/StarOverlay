@@ -31,6 +31,9 @@ public static class ProtocolJson
 
     public static string WriteWindows(IReadOnlyList<WindowDto> windows) => JsonSerializer.Serialize(windows, Options);
 
+    /// <summary>One window as text: two windows with the same text look the same.</summary>
+    public static string WriteWindow(WindowDto window) => JsonSerializer.Serialize(window, Options);
+
     public static Envelope? Read(string line)
     {
         if (string.IsNullOrWhiteSpace(line) || line.Length > Protocol.MaxLineBytes) return null;

@@ -18,6 +18,7 @@ static class GameBuffBar
     static Transform _node;
     static Vector3 _original = Vector3.one;
     static float _nextPass;
+    static float _nextVerify;
 
     /// <summary>The tracker is running: keep the game's list invisible.</summary>
     internal static void Hide(bool hide)
@@ -35,18 +36,24 @@ static class GameBuffBar
         _nextPass = Time.realtimeSinceStartup + 0.1f;
         try
         {
-            if (_screenRoot == null) _screenRoot = FindScreenRoot();
-            if (_screenRoot == null) return;
-            var node = _screenRoot.Find(ListPath);
-            if (node == null) return;
-            if (node != _node)
+            // the node is known: only its scale is kept at zero; the long path is walked again once a second (the screen may have been built again)
+            var now = Time.realtimeSinceStartup;
+            if (_node == null || now >= _nextVerify)
             {
-                Restore(); // a new node (the screen was rebuilt): the old one is gone or about to be
-                _node = node;
-                _original = node.localScale;
+                _nextVerify = now + 1f;
+                if (_screenRoot == null) _screenRoot = FindScreenRoot();
+                if (_screenRoot == null) return;
+                var node = _screenRoot.Find(ListPath);
+                if (node == null) return;
+                if (node != _node)
+                {
+                    Restore(); // a new node (the screen was rebuilt): the old one is gone or about to be
+                    _node = node;
+                    _original = node.localScale;
+                }
             }
 
-            if (node.localScale != Vector3.zero) node.localScale = Vector3.zero;
+            if (_node.localScale != Vector3.zero) _node.localScale = Vector3.zero;
         }
         catch (Exception e)
         {

@@ -182,7 +182,7 @@ public sealed class RepeatModel(Func<string, string?> read, Action<string, strin
     // the folders of the picture library, in the order they are looked in: the skills of the weapons, then the imagine skills ("오의"·"비기")
     private static readonly string[] PictureFolders = ["Skills", "Imagines"];
 
-    /// <summary>The picture file of the skill (the game's own picture, bundled with the plugin), or empty: the row then shows the first letter of the name.</summary>
+    /// <summary>The picture of the skill: a bundled file when the plugin has one, else the game's own picture file of that name ("tex:&lt;name&gt;", the window asks the game for it; the picture stays empty until it is there, or when the game has none).</summary>
     private string Picture(int id)
     {
         var icon = SkillBook.IconOf(id);
@@ -193,6 +193,6 @@ public sealed class RepeatModel(Func<string, string?> read, Action<string, strin
             if (File.Exists(path)) return "file:" + path;
         }
 
-        return "";
+        return "tex:" + icon;
     }
 }

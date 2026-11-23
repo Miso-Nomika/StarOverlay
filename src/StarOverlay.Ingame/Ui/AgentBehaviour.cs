@@ -33,10 +33,14 @@ public class AgentBehaviour : MonoBehaviour
                 var shown = GameChatUi.MainScreenShown();
                 _ui.SetVisible(shown);
                 TableDump.Visible = shown;
+                Presets.PresetBridge.Shown(shown);
             }
 
             TableDump.Tick();
             Skills.HeldSkillRepeater.Tick();
+            Presets.PresetBridge.Tick();
+            Party.PartyBridge.Tick();
+            GameImages.Poll();
             _ui.Tick();
             GameChatInput.Poll();
             StickerCache.Poll();
@@ -54,6 +58,8 @@ public class AgentBehaviour : MonoBehaviour
                 else if (message.T == MessageType.Record) _ui.OnRecord(message.Window, message.Record);
                 else if (message.T == MessageType.Tables && message.Root != null) TableDump.Request(Link, message.Root);
                 else if (message.T == MessageType.Repeat && message.Repeat != null) Skills.HeldSkillRepeater.Apply(message.Repeat, Link);
+                else if (message.T == MessageType.Preset && message.Preset != null) Presets.PresetBridge.Apply(message.Preset, Link);
+                else if (message.T == MessageType.Party && message.Party != null) Party.PartyBridge.Apply(message.Party, Link);
                 else if (message.T == MessageType.Err) Plugin.L.LogWarning("service: " + message.Error);
             }
 

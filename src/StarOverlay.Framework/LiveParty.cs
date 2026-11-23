@@ -10,7 +10,9 @@ public sealed record PartyApplicant(
     int SeasonStrength,
     DateTime At,
     int ApplyType = 0,
-    int TalentId = 0);
+    int TalentId = 0,
+    int MasterScore = -1,
+    bool MasterShown = true);
 
 public static class PartyJobs
 {
@@ -96,6 +98,13 @@ public static class PartyJobs
 
     public static int Normalize(int professionId) => professionId >= 10000 ? professionId / 10000 : professionId;
 
+    /// <summary>
+    /// A healer: a healing spec (치유, 협주), or one of the two healer classes (실반오라클, 비트퍼포머) whose spec is not known (shown as the class name). The
+    /// other specs of those classes (심판, 음파) are not healers.
+    /// </summary>
+    public static bool IsHealer(int professionId, string profession) =>
+        profession is "협주" or "치유" || (Normalize(professionId) is 5 or 13 && !IsSpec(profession));
+
     public static string Base(int professionId)
     {
         var id = professionId >= 10000 ? professionId / 10000 : professionId;
@@ -122,6 +131,94 @@ public static class LiveParty
     static readonly Dictionary<long, string> _seenById = [];
     static PartyApplicant[] _rows = [];
     static int _generation;
+    static readonly Dictionary<long, (int Score, bool Shown)> _masters = []; // the master scores read from the game (-1 = not read yet)
+    static bool _active;
+    static string _request = "";
+    static int _serial;
+    static string _failedApply = "";
+    static long _failedUntilMs;
+
+    /// <summary>Raised when the plugin is switched on or off, a master score is wanted, or the player accepted or rejected an application: the agent is told.</summary>
+    public static event Action? Changed;
+
+    /// <summary>The party join plugin is loaded (the agent reads and calls the game only then).</summary>
+    public static bool Active
+    {
+        get { lock (Gate) return _active; }
+    }
+
+    public static void SetActive(bool active)
+    {
+        lock (Gate)
+        {
+            if (_active == active) return;
+            _active = active;
+            if (!active) _masters.Clear();
+        }
+
+        Changed?.Invoke();
+    }
+
+    /// <summary>The characters in the list whose master score has not been read yet.</summary>
+    public static IReadOnlyList<long> Need
+    {
+        get
+        {
+            lock (Gate) return _applies.Values.SelectMany(people => people).Select(person => person.CharId).Where(id => id != 0 && !_masters.ContainsKey(id)).Distinct().ToArray();
+        }
+    }
+
+    /// <summary>What the agent read from the game: "charId|score|shown" per line.</summary>
+    public static void NoteMasters(IEnumerable<(long CharId, int Score, bool Shown)> scores)
+    {
+        lock (Gate)
+        {
+            foreach (var (charId, score, shown) in scores) _masters[charId] = (score, shown);
+            if (ApplyKnown()) Publish();
+        }
+    }
+
+    /// <summary>The newest request for the agent: "accept:id" or "reject:id"; <see cref="Serial"/> grows with every request.</summary>
+    public static (string Request, int Serial) Pending
+    {
+        get { lock (Gate) return (_request, _serial); }
+    }
+
+    /// <summary>The player pressed accept or reject on an application: asks the agent to hand it to the game.</summary>
+    public static void RequestDeal(string applyId, bool accept)
+    {
+        if (applyId.Length == 0) return;
+        lock (Gate)
+        {
+            _request = (accept ? "accept:" : "reject:") + applyId;
+            _serial++;
+        }
+
+        Changed?.Invoke();
+    }
+
+    /// <summary>The game took the answer (the application leaves the list) or refused it (the row says so for three seconds).</summary>
+    public static void NoteDealt(string applyId, bool ok, long nowMs)
+    {
+        if (ok)
+        {
+            Remove(applyId);
+            return;
+        }
+
+        lock (Gate)
+        {
+            _failedApply = applyId;
+            _failedUntilMs = nowMs + 3000;
+            Publish();
+        }
+    }
+
+    /// <summary>The application whose answer the game refused just now (shown for three seconds), or empty.</summary>
+    public static string RecentFailure(long nowMs)
+    {
+        lock (Gate) return nowMs < _failedUntilMs ? _failedApply : "";
+    }
 
     public static int Generation => Volatile.Read(ref _generation);
 
@@ -136,6 +233,8 @@ public static class LiveParty
             else _applies[applyId] = people.Select(Decorate).ToArray();
             Publish();
         }
+
+        if (Active) Changed?.Invoke(); // the agent learns whose master score is wanted
     }
 
     public static void Forget(long charId)
@@ -221,12 +320,20 @@ public static class LiveParty
     {
         var profession = PartyJobs.Base(person.ProfessionId);
         var family = PartyJobs.Normalize(person.ProfessionId);
-        if (person.CharId != 0 && family != 0 && SpecBook.TryGet(person.CharId, out var saved) && PartyJobs.ProfessionOf(saved) == family)
+        // the saved spec is shown only for the same profession, from the current season on (an older season's gear and spec are history), and when
+        // the applicant's fight power is not below the saved one (a lower power means the build was changed since)
+        if (person.CharId != 0 && family != 0 && SpecBook.TryGet(person.CharId, out var saved, out _, out var savedFight)
+            && SpecBook.SeasonOf(person.CharId) >= SpecBook.CurrentSeason
+            && PartyJobs.ProfessionOf(saved) == family
+            && person.FightPoint >= savedFight)
             profession = saved;
         else if (person.CharId != 0 && family != 0 && _seenById.TryGetValue(person.CharId, out var seen) && PartyJobs.ProfessionOf(seen) == family)
             profession = seen;
         if (profession.Length == 0) profession = person.Profession;
-        return profession == person.Profession ? person : person with { Profession = profession };
+        var master = person.CharId != 0 && _masters.TryGetValue(person.CharId, out var read) ? read : (Score: -1, Shown: true);
+        return profession == person.Profession && master.Score == person.MasterScore && master.Shown == person.MasterShown
+            ? person
+            : person with { Profession = profession, MasterScore = master.Score, MasterShown = master.Shown };
     }
 
     static void Publish()

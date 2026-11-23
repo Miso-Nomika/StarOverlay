@@ -48,7 +48,7 @@ internal sealed class WindowView
     int _barVisible, _barTotal;
     Image _barTrack, _barThumb;
 
-    const double BarWidth = 4;     // the bar is this wide, at the right edge of the body
+    const double BarWidth = 3;     // the bar is this wide (as thin as the chat window's), at the right edge of the body
     const double BarRoom = 8;      // the rows of a list with a bar are this much narrower
     public int Failures;
     public bool Dead;
@@ -169,6 +169,7 @@ internal sealed class WindowView
             _bareDragged = 0f;
         });
         _bareGrip = label.transform.parent.gameObject;
+        UiKit.Place(_bareGrip, 0, 0, BareGrip, GripHeight); // at once: a new node is as large as the default rectangle and sits in the middle until a layout places it
         // the handle shows the drag icon: two columns of three round dots
         var dots = UiKit.Box("Dots", _bareGrip.transform, new Color(0.86f, 0.9f, 0.96f, 0.95f));
         dots.sprite = UiKit.Icon("drag");
@@ -217,8 +218,25 @@ internal sealed class WindowView
         if (_window != null) UnityEngine.Object.Destroy(_window);
     }
 
+    string _applied; // the content of the window that was drawn last (not the chat: it has its own check)
+
     public void Apply(WindowDto dto)
     {
+        // a snapshot that says the same as the one drawn is not drawn again (the service sends all windows whenever one of them changes); the same
+        // object again (a picture arrived, a scroll) is always drawn
+        if (Id != "chat" && _dto != null && !ReferenceEquals(dto, _dto))
+        {
+            var content = ProtocolJson.WriteWindow(dto);
+            if (content == _applied)
+            {
+                _dto = dto;
+                return;
+            }
+
+            _applied = content;
+        }
+        else _applied = null;
+
         _dto = dto;
         var layout = _live ?? dto.Layout;
         if (dto.Bare)
@@ -503,7 +521,7 @@ internal sealed class WindowView
                         if (y + step > listHeight) break;
                         var row = Row(rowIndex++);
                         row.Place(0, y, meterWidth, step - 2);
-                        row.ShowMeter(data, size, System.IO.Path.Combine(_root.AssetsRoot, Id, "assets"));
+                        row.ShowMeter(data, size, System.IO.Path.Combine(_root.AssetsRoot, Id, "assets"), key => _root.Send(new CommandDto { Window = Id, Action = CommandAction.Press, Key = "row:" + key }));
                         y += step;
                     }
 
@@ -533,15 +551,17 @@ internal sealed class WindowView
                         // a list of skills: the wheel and a drag move it by rows when more rows are there than fit
                         var (size, step) = IconStrip.ListMetrics(widget);
                         _rowStep = step;
-                        var room = Math.Max(step, bodyHeight - y);
+                        var head = IconStrip.HeaderHeightOf(widget); // columns have their titles above the rows
+                        var total = IconStrip.TotalRows(widget);
+                        var room = Math.Max(step, bodyHeight - y - head);
                         var visible = Math.Max(1, (int)Math.Floor((room + (step - size)) / step));
-                        _maxScroll = Math.Max(0, widget.Icons.Count - visible);
+                        _maxScroll = Math.Max(0, total - visible);
                         _scroll = Math.Clamp(_scroll, 0, _maxScroll);
                         var listWidth = bodyWidth;
-                        if (widget.Icons.Count > visible)
+                        if (total > visible)
                         {
                             listWidth = bodyWidth - BarRoom;
-                            (_barTop, _barHeight, _barVisible, _barTotal) = (y, room, visible, widget.Icons.Count);
+                            (_barTop, _barHeight, _barVisible, _barTotal) = (y + head, room, visible, total);
                         }
 
                         y += _strip.Apply(widget, y, listWidth, _scroll, visible);
@@ -634,6 +654,13 @@ internal sealed class WindowView
         readonly Image[] _icons = new Image[5]; // job, imagine 1, imagine 2, cuisine, syrup
         readonly string[] _tips = new string[5];
         readonly UiRoot _ui;
+        readonly Action<int> _scrolled;
+        readonly GameObject[] _actionButtons = new GameObject[2]; // the buttons at the right end of a row (accept, reject)
+        readonly TextMeshProUGUI[] _actionLabels = new TextMeshProUGUI[2];
+        readonly Image[] _actionBacks = new Image[2];
+        readonly Image[] _actionMarks = new Image[2]; // the check or the cross on a button
+        readonly string[] _actionKeys = new string[2];
+        Action<string> _press;
         UnityEngine.Events.UnityAction _action;
         readonly UnityEngine.UI.Button _button;
         double _w;
@@ -642,6 +669,7 @@ internal sealed class WindowView
         public RowView(UiRoot ui, Transform parent, Action<int> scrolled)
         {
             _ui = ui;
+            _scrolled = scrolled;
             _root = UiKit.Node("Row", parent);
             UiKit.Box("Back", _root.transform, new Color(1f, 1f, 1f, 0.06f));
             UiKit.Stretch(_root.transform.Find("Back").gameObject);
@@ -671,9 +699,53 @@ internal sealed class WindowView
             _root.SetActive(true);
         }
 
-        public void ShowMeter(RowDto row, int size, string assets)
+        /// <summary>The buttons at the right end of the row; returns the width they take (0 when the row has none).</summary>
+        double ShowActions(List<RowActionDto> actions)
+        {
+            for (var i = 0; i < _actionButtons.Length; i++)
+                if (_actionButtons[i] != null) _actionButtons[i].SetActive(false);
+            if (actions == null || actions.Count == 0) return 0;
+            var count = Math.Min(actions.Count, _actionButtons.Length);
+            var width = Math.Max(30, _h * 1.5);
+            var height = Math.Max(14, _h - 6);
+            for (var i = 0; i < count; i++)
+            {
+                if (_actionButtons[i] == null)
+                {
+                    var slot = i;
+                    var label = UiKit.Button("Action" + i, _root.transform, "", Color.gray, () =>
+                    {
+                        if (_actionKeys[slot] != null) _press?.Invoke(_actionKeys[slot]);
+                    });
+                    _actionButtons[i] = label.transform.parent.gameObject;
+                    _actionLabels[i] = label;
+                    _actionBacks[i] = _actionButtons[i].GetComponent<Image>();
+                    var mark = UiKit.Box("Mark", _actionButtons[i].transform, Color.white);
+                    mark.preserveAspect = true;
+                    UiKit.Stretch(mark.gameObject, 4, 3, 4, 3);
+                    _actionMarks[i] = mark;
+                    UiKit.Scroller(_actionButtons[i], 24, _scrolled); // the wheel and a drag over a button still move the list
+                }
+
+                _actionKeys[i] = actions[i].Key;
+                _actionBacks[i].color = UiKit.Rgb(actions[i].Color == 0 ? 0x4A90D9 : actions[i].Color, 0.9f);
+                _actionLabels[i].fontSize = (float)Math.Max(10, height * 0.5);
+                var picture = actions[i].Icon == "check" ? MarkArt.Check : actions[i].Icon == "cross" ? MarkArt.Cross : null;
+                _actionMarks[i].gameObject.SetActive(picture != null);
+                _actionMarks[i].sprite = picture;
+                UiKit.SetText(_actionLabels[i], picture != null ? "" : Escape(actions[i].Label));
+                UiKit.Place(_actionButtons[i], _w - 4 - (count - i) * (width + 3) + 3, (_h - height) / 2, width, height);
+                _actionButtons[i].SetActive(true);
+            }
+
+            return count * (width + 3);
+        }
+
+        public void ShowMeter(RowDto row, int size, string assets, Action<string> press = null)
         {
             HideChoices();
+            _press = press;
+            var actionsWidth = ShowActions(row.Actions);
             var bar = UiKit.Rt(_fill.gameObject);
             bar.anchorMin = Vector2.zero;
             bar.anchorMax = new Vector2((float)Math.Clamp(row.Bar, 0, 1), 1f); // exactly the ratio: 0% damage is an empty bar
@@ -689,13 +761,13 @@ internal sealed class WindowView
             _rank.fontSize = size;
             _rank.color = ink;
             UiKit.SetText(_rank, row.Rank);
-            var rankWidth = size * 0.62 * Math.Max(3, row.Rank.Length);
+            var rankWidth = row.Rank.Length == 0 ? 0 : size * 0.62 * Math.Max(3, row.Rank.Length); // a row without a rank text (the party list) starts at the left edge
             UiKit.Place(_rank.gameObject, x, 0, rankWidth, _h);
-            x += rankWidth + 4;
+            x += rankWidth + (row.Rank.Length == 0 ? 0 : 4);
 
             if (row.ProfessionId >= 0)
             {
-                var sprite = row.ProfessionId == 0 ? null : UiKit.LoadSprite(System.IO.Path.Combine(assets, "professions", $"Profession_{row.ProfessionId}.png"));
+                var sprite = GameImages.Profession(row.ProfessionId); // the game's own class picture
                 _tips[0] = null;
                 x = Icon(0, x, icon, sprite, row.IconColor != 0 ? UiKit.Rgb(row.IconColor) : Color.white, row.ProfessionId == 0);
             }
@@ -710,7 +782,7 @@ internal sealed class WindowView
                 {
                     var file = System.IO.Path.GetFileName(row.Imagines[i].Icon.Replace('\\', '/'));
                     if (file.Length > 0 && !file.EndsWith(".png", StringComparison.OrdinalIgnoreCase)) file += ".png";
-                    var sprite = file.Length == 0 ? null : UiKit.LoadSprite(System.IO.Path.Combine(assets, "imagines", file));
+                    var sprite = file.Length == 0 ? null : UiKit.LibraryPicture(System.IO.Path.Combine(assets, "imagines", file));
                     var imagine = row.Imagines[i];
                     _tips[1 + i] = imagine.Name.Length == 0 ? null : imagine.Tier > 0 ? $"{imagine.Name} ({imagine.Tier})" : imagine.Name;
                     x = Icon(1 + i, x, icon, sprite, Color.white, file.Length == 0); // not equipped: an invisible placeholder keeps the columns aligned
@@ -724,11 +796,11 @@ internal sealed class WindowView
             _right.fontSize = Math.Max(8, size - 1);
             _right.color = ink;
             UiKit.SetText(_right, row.Value);
-            var valueWidth = Math.Min(_w * 0.62, Math.Max(40, row.Value.Length * (size - 1) * 0.56 + 8));
-            UiKit.Place(_right.gameObject, _w - valueWidth - 6, 0, valueWidth, _h);
+            var valueWidth = Math.Min(_w * 0.62 - actionsWidth * 0.5, Math.Max(40, row.Value.Length * (size - 1) * 0.56 + 8));
+            UiKit.Place(_right.gameObject, _w - actionsWidth - valueWidth - 6, 0, valueWidth, _h);
 
             // cuisine and syrup icons sit left of the value
-            var mealX = _w - valueWidth - 10;
+            var mealX = _w - actionsWidth - valueWidth - 10;
             var meals = 0;
             if (row.Syrup)
             {
@@ -756,7 +828,7 @@ internal sealed class WindowView
             _left.fontSize = size;
             _left.color = ink;
             UiKit.SetText(_left, Escape(row.Name));
-            UiKit.Place(_left.gameObject, x, 0, Math.Max(8, _w - valueWidth - 10 - meals * (icon + 2) - x), _h);
+            UiKit.Place(_left.gameObject, x, 0, Math.Max(8, _w - actionsWidth - valueWidth - 10 - meals * (icon + 2) - x), _h);
             _left.alpha = row.Dead ? 0.55f : 1f;
             _button.interactable = false;
         }
@@ -855,6 +927,8 @@ internal sealed class WindowView
 
         void HideChoices()
         {
+            foreach (var button in _actionButtons)
+                if (button != null) button.SetActive(false);
             foreach (var button in _stateButtons)
                 if (button != null) button.SetActive(false);
             foreach (var button in _stepButtons)

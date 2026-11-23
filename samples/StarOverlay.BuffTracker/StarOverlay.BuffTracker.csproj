@@ -13,6 +13,8 @@
 
   <ItemGroup>
     <Content Include="assets\library\**\*.png" Link="assets\library\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <!-- the names of the pictures the game has (not bundled): the picture picker lists them with the bundled ones -->
+    <Content Include="assets\library\**\_game.txt" Link="assets\library\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

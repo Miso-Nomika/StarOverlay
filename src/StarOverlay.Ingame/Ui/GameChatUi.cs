@@ -64,6 +64,7 @@ static class GameChatUi
     static Transform _hint;
     static bool _hintFound; // the key hint line was found at least once in this session
     static float _nextHintSearch;
+    static int _hintSearchSig;
 
     /// <summary>
     /// Whether the game shows its main screen now. The main screen has a line of key hints at the bottom ("[I] 파티  [5] 내비게이션 길게 누르기"):
@@ -115,7 +116,7 @@ static class GameChatUi
         }
 
         // The game switches things on and off for a moment while it changes screens (the death screen fades in and out in steps): a hide reason
-        // that holds for less than a third of a second is no reason to blink our windows. Loading screens hide at once.
+        // that holds for less than 0.15 seconds is no reason to blink our windows. Loading screens hide at once.
         var now = Time.realtimeSinceStartup;
         bool shown;
         if (reason.Length == 0) { _hiddenSince = -1f; shown = true; }
@@ -123,7 +124,7 @@ static class GameChatUi
         else
         {
             if (_hiddenSince < 0f) _hiddenSince = now;
-            shown = _lastShown && now - _hiddenSince < 0.35f;
+            shown = _lastShown && now - _hiddenSince < 0.15f;
         }
 
         _lastShown = shown;
@@ -141,8 +142,7 @@ static class GameChatUi
     static Transform FindHint()
     {
         if (_hint != null && WhyHidden(_hint) == null) return _hint; // the usual case: a cheap check
-        if (Time.realtimeSinceStartup < _nextHintSearch) return _hint;
-        _nextHintSearch = Time.realtimeSinceStartup + (_hint == null ? 0.25f : 1f);
+        if (!SearchDue(ref _nextHintSearch, ref _hintSearchSig, _hint != null, 0.25f)) return _hint;
         Transform first = null;
         foreach (var text in UnityEngine.Object.FindObjectsOfType<TMPro.TMP_Text>())
         {
@@ -177,6 +177,49 @@ static class GameChatUi
     static bool _infoFound; // the character info line was found at least once in this session
     static string _infoName; // its label name once found: later searches read only labels of that name
     static float _nextInfoSearch;
+    static int _infoSearchSig;
+
+    /// <summary>
+    /// Whether the labels are to be searched again (the search reads every label of the game: a few milliseconds and a lot of memory). While no label is known
+    /// it is every <paramref name="every"/> seconds. A label that is known but not on screen (dead, a full-screen window, loading) is the same object that
+    /// comes back, unless the game builds its main screen again, and that changes the windows of its layers: then the search runs at once (at most twice
+    /// a second), otherwise only every five seconds.
+    /// </summary>
+    static bool SearchDue(ref float next, ref int lastSignature, bool known, float every)
+    {
+        var now = Time.realtimeSinceStartup;
+        var signature = LayerSignature();
+        if (known)
+        {
+            if (signature == lastSignature ? now < next : now < next - 4.5f) return false;
+        }
+        else if (now < next) return false;
+
+        lastSignature = signature;
+        next = now + (known ? 5f : every);
+        return true;
+    }
+
+    static Transform _uiRoot; // the game's screen tree ("zuiroot"), found with the loading screen layer
+
+    /// <summary>
+    /// A number that changes when a window of the game opens or closes (which of the windows in each layer of the screen tree are switched on): the
+    /// cheap sign that the screen needs a new look. 0 until the screen tree is known.
+    /// </summary>
+    static int LayerSignature()
+    {
+        if (_uiRoot == null) return 0;
+        var hash = 17;
+        for (var i = 0; i < _uiRoot.childCount; i++)
+        {
+            var layer = _uiRoot.GetChild(i);
+            for (var j = 0; j < layer.childCount; j++)
+                hash = hash * 31 + (layer.GetChild(j).gameObject.activeSelf ? j + 1 : 0);
+            hash = hash * 31 + layer.childCount;
+        }
+
+        return hash;
+    }
 
     /// <summary>
     /// The label of the character info line at the bottom left of the main screen ("Lv.60(+14) ... UID: 58165753"): the label whose words
@@ -186,10 +229,8 @@ static class GameChatUi
     static Transform FindInfo()
     {
         if (_info != null && WhyHidden(_info) == null) return _info; // the usual case: a cheap check
-        var now = Time.realtimeSinceStartup;
-        if (now < _nextInfoSearch) return _info;
         // reading the words of every label allocates: until the label's name is known it is done once a second
-        _nextInfoSearch = now + (_infoName == null ? 1f : _info == null ? 0.25f : 1f);
+        if (!SearchDue(ref _nextInfoSearch, ref _infoSearchSig, _info != null, _infoName == null ? 1f : 0.25f)) return _info;
         Transform first = null;
         foreach (var text in UnityEngine.Object.FindObjectsOfType<TMPro.TMP_Text>())
         {
@@ -224,6 +265,22 @@ static class GameChatUi
     /// reason, or null when the line is in the user's view. Our own windows do not count.
     /// </summary>
     static string CoveredBy(Transform info)
+    {
+        // the click test is the most expensive part of the check: a result is kept while no window of the game opened or closed (one second at most), and
+        // a new test follows a change after 0.2 seconds at the earliest
+        var now = Time.realtimeSinceStartup;
+        var signature = LayerSignature();
+        if (info == _coverInfo && (signature == _coverSignature ? now - _coverAt < 1f : now - _coverAt < 0.2f)) return _coverResult;
+        (_coverInfo, _coverSignature, _coverAt) = (info, signature, now);
+        return _coverResult = CoveredByTested(info);
+    }
+
+    static Transform _coverInfo;
+    static int _coverSignature;
+    static float _coverAt;
+    static string _coverResult;
+
+    static string CoveredByTested(Transform info)
     {
         try
         {
@@ -349,6 +406,7 @@ static class GameChatUi
             foreach (var canvas in UnityEngine.Object.FindObjectsOfType<Canvas>())
             {
                 if (canvas == null || !canvas.isRootCanvas || canvas.name != "zuiroot") continue;
+                _uiRoot = canvas.transform;
                 _tipLayer = Find(canvas.transform, "UILayerSystemTip");
                 break;
             }
@@ -496,8 +554,6 @@ static class GameChatUi
         }
     }
 
-    static int _linkLogs;
-
     /// <summary>Whether a screen point is on the entries of the game's channel tab.</summary>
     internal static bool ChannelTabContains(Vector2 screen, Camera camera)
     {
@@ -539,120 +595,6 @@ static class GameChatUi
         {
             return false;
         }
-    }
-
-    /// <summary>
-    /// Clicks the item link of the game's own chat bubble that shows the same item (newest bubble first, of the same sender when the bubble names one),
-    /// so the game opens its card as for a real click, with the item's own data. False when the game's list has no such bubble any more.
-    /// </summary>
-    internal static bool ClickItemLink(string who, string itemName)
-    {
-        try
-        {
-            var chat = FindChat();
-            var content = chat == null ? null : Find(Find(chat, "node_dialogue"), "node_content");
-            if (content == null) return false;
-            var wantName = Squash(itemName).Trim('[', ']');
-            var wantWho = Squash(who);
-            var bubbles = new List<Transform>();
-            for (var i = 0; i < content.childCount; i++)
-            {
-                var node = content.GetChild(i);
-                if (node.gameObject.activeSelf && node.name.StartsWith("main_bubble", StringComparison.Ordinal)) bubbles.Add(node);
-            }
-
-            bubbles.Sort((a, b) => a.position.y.CompareTo(b.position.y)); // lowest on screen = newest first
-            foreach (var bubble in bubbles)
-            {
-                var name = Find(bubble, "lab_name")?.GetComponent<TMPro.TMP_Text>();
-                if (wantWho.Length > 0 && name != null && Squash(System.Text.RegularExpressions.Regex.Replace(name.text ?? "", "<[^>]+>", "")) != wantWho) continue;
-                foreach (var text in bubble.GetComponentsInChildren<TMPro.TMP_Text>(false))
-                {
-                    var info = text.textInfo;
-                    if (info == null || info.linkCount <= 0) continue;
-                    for (var k = 0; k < info.linkCount; k++)
-                    {
-                        var link = info.linkInfo[k];
-                        var shown = Squash(System.Text.RegularExpressions.Regex.Replace(link.GetLinkText() ?? "", "<[^>]+>", "")).Trim('[', ']');
-                        if (wantName.Length > 0 && shown.Length > 0 && !shown.Contains(wantName) && !wantName.Contains(shown)) continue;
-                        if (SendClick(text, link)) return true;
-                    }
-                }
-            }
-
-            return false;
-        }
-        catch (Exception e)
-        {
-            if (_linkLogs++ < 6) Plugin.L.LogWarning("game item link: " + e.Message);
-            return false;
-        }
-    }
-
-    /// <summary>
-    /// What the game does when its chat link is clicked: its label component keeps a callback for link clicks. That callback is called with the
-    /// link's id, as the game's own click does after finding the link under the cursor. False when the label has no such callback or it failed.
-    /// </summary>
-    static bool SendClick(TMPro.TMP_Text text, TMPro.TMP_LinkInfo link)
-    {
-        var id = link.GetLinkID();
-        foreach (var part in text.gameObject.GetComponents<Component>())
-        {
-            if (part == null) continue;
-            var typeName = part.GetIl2CppType().FullName;
-            var type = ManagedType(typeName);
-            if (type == null) continue;
-            var cast = typeof(Il2CppInterop.Runtime.InteropTypes.Il2CppObjectBase).GetMethod("TryCast")?.MakeGenericMethod(type).Invoke(part, null);
-            if (cast == null) continue;
-            for (var at = type; at != null && at != typeof(object); at = at.BaseType)
-            {
-                foreach (var member in at.GetMembers(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.DeclaredOnly))
-                {
-                    if (member.Name.IndexOf("LinkClick", StringComparison.OrdinalIgnoreCase) < 0 || member.Name.StartsWith("Native", StringComparison.Ordinal)) continue;
-                    object callback = member switch
-                    {
-                        System.Reflection.PropertyInfo p when p.CanRead && p.GetIndexParameters().Length == 0 => p.GetValue(cast),
-                        System.Reflection.FieldInfo field => field.GetValue(cast),
-                        _ => null,
-                    };
-                    if (callback == null) continue;
-                    var invoke = callback.GetType().GetMethod("Invoke");
-                    if (invoke == null) continue;
-                    var parameters = invoke.GetParameters();
-                    var args = new object[parameters.Length];
-                    for (var i = 0; i < args.Length; i++) args[i] = parameters[i].ParameterType == typeof(string) ? id : parameters[i].ParameterType.IsValueType ? Activator.CreateInstance(parameters[i].ParameterType) : null;
-                    try
-                    {
-                        invoke.Invoke(callback, args);
-                        return true;
-                    }
-                    catch (Exception e)
-                    {
-                        var inner = e is System.Reflection.TargetInvocationException { InnerException: not null } t ? t.InnerException : e;
-                        if (_linkLogs++ < 8) Plugin.L.LogWarning("game item link: " + typeName + "." + member.Name + " failed: " + inner.Message);
-                    }
-                }
-            }
-        }
-
-        return false;
-    }
-
-    static System.Type ManagedType(string name)
-    {
-        foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
-        {
-            try
-            {
-                var type = assembly.GetType(name);
-                if (type != null) return type;
-            }
-            catch (Exception)
-            {
-            }
-        }
-
-        return null;
     }
 
     static string Squash(string text) => System.Text.RegularExpressions.Regex.Replace(text ?? "", @"\s+", "");

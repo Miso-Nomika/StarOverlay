@@ -61,7 +61,7 @@ internal sealed partial class SettingsView
     {
         _root = root;
         _plugin = plugin;
-        _window = UiKit.Node("Settings_" + plugin, root.SharedParent);
+        _window = UiKit.Node("Settings_" + plugin, root.SettingsParent);
         _panel = UiKit.Node("Panel", _window.transform);
         UiKit.Stretch(_panel);
         UiKit.Stretch(UiKit.Box("Background", _panel.transform, Panel, raycast: true).gameObject);
@@ -180,7 +180,7 @@ internal sealed partial class SettingsView
     string Signature(WindowDto dto, LayoutDto layout)
     {
         var sb = new StringBuilder();
-        sb.Append(_tab).Append('|').Append(Math.Round(layout.W, 3)).Append('|').Append(Math.Round(layout.H, 3)).Append('|').Append(_scroll).Append('|');
+        sb.Append(GameImages.Version).Append('|').Append(_tab).Append('|').Append(Math.Round(layout.W, 3)).Append('|').Append(Math.Round(layout.H, 3)).Append('|').Append(_scroll).Append('|');
         if (_tab == "settings")
         {
             foreach (var s in dto.Settings) sb.Append(s.Key).Append('=').Append(s.Value).Append(';');
@@ -296,6 +296,7 @@ internal sealed partial class SettingsView
         _listW = bw;
         _listH = bh;
         _scroll = Math.Min(_scroll, MaxSettingsScroll(dto)); // a window that grew may have room for everything now
+        var rowW = MaxSettingsScroll(dto) > 0 ? bw - 8 : bw; // a list that scrolls keeps a strip free for its bar
         double y = 0;
         var skip = _scroll;
         var shown = 0;
@@ -310,12 +311,13 @@ internal sealed partial class SettingsView
             }
 
             if (y + h > bh) break;
-            SettingRow(setting, y, bw, h);
+            SettingRow(setting, y, rowW, h);
             y += h + 4;
             shown++;
         }
 
         DrawComboList();
+        ScrollBar(_body.transform, bw, 0, bh, dto.Settings.Count, shown, _scroll);
         if (dto.Settings.Count == 0)
             Text(_body.transform, "이 플러그인에는 설정이 없습니다.", 0, 0, bw, 24, 15, new Color(0.62f, 0.68f, 0.76f, 1f));
         if (_scroll > 0) Small("▲", bw - 30, 0, () => { _scroll = Math.Max(0, _scroll - 1); Dirty(); });
@@ -491,6 +493,7 @@ internal sealed partial class SettingsView
             Redraw();
         });
         if (_heads.Count == 0) Text(recordRegion.transform, "저장된 기록이 없습니다.", 8, 0, w - 16, listRowH, 14, muted);
+        var rw = _heads.Count > visibleRecords ? w - 8 : w; // the bar has its own strip at the right edge: nothing is drawn under it
         double ry = 0;
         for (var i = _rScroll; i < Math.Min(_heads.Count, _rScroll + visibleRecords); i++)
         {
@@ -499,14 +502,14 @@ internal sealed partial class SettingsView
             var item = UiKit.Button("Rec_" + head.Id, recordRegion.transform, "", selected ? RowSelected : Row, () =>
                 _root.Send(new CommandDto { Window = _plugin, Action = CommandAction.RecordOpen, Key = head.Id }));
             var box = item.transform.parent.gameObject;
-            UiKit.Place(box, 0, ry, w, listRowH - 2);
+            UiKit.Place(box, 0, ry, rw, listRowH - 2);
             item.text = "";
             // two columns without a line between them: why the fight ended (yellow, always the same width so the titles line up), then the title
             const double reasonColumn = 100;
             if (head.EndReason.Length > 0)
                 Text(box.transform, "<color=" + ReasonColor(head.EndReason) + ">" + Esc(Fit(head.EndReason, reasonColumn - 8)) + "</color>", 8, 0, reasonColumn - 8, listRowH - 2, 13, Color.white);
-            Text(box.transform, Esc(Fit(head.Name, w - 350 - reasonColumn)), 8 + reasonColumn, 0, w - 350 - reasonColumn, listRowH - 2, 13, Color.white);
-            Text(box.transform, head.Started + (head.Current ? "  <color=#8fe0a8>진행 중</color>" : ""), w - 322, 0, 270, listRowH - 2, 13, muted, TextAlignmentOptions.MidlineRight);
+            Text(box.transform, Esc(Fit(head.Name, rw - 350 - reasonColumn)), 8 + reasonColumn, 0, rw - 350 - reasonColumn, listRowH - 2, 13, Color.white);
+            Text(box.transform, head.Started + (head.Current ? "  <color=#8fe0a8>진행 중</color>" : ""), rw - 322, 0, 270, listRowH - 2, 13, muted, TextAlignmentOptions.MidlineRight);
             if (!head.Current)
             {
                 var ticked = _checked.Contains(head.Id);
@@ -515,12 +518,13 @@ internal sealed partial class SettingsView
                     if (!_checked.Add(head.Id)) _checked.Remove(head.Id);
                     Dirty();
                 });
-                UiKit.Place(tick.transform.parent.gameObject, w - 32, (listRowH - 2 - 20) / 2, 24, 20);
+                UiKit.Place(tick.transform.parent.gameObject, rw - 32, (listRowH - 2 - 20) / 2, 24, 20);
             }
 
             ry += listRowH;
         }
 
+        ScrollBar(recordRegion.transform, w, 0, visibleRecords * listRowH, _heads.Count, visibleRecords, _rScroll);
         if (maxRecordScroll > 0)
             Text(_body.transform, $"{_rScroll + 1}-{Math.Min(_heads.Count, _rScroll + visibleRecords)} / {_heads.Count}  (휠로 넘기기)", w - 260, 22 + visibleRecords * listRowH, 252, 16, 11, muted, TextAlignmentOptions.MidlineRight);
 
@@ -540,7 +544,8 @@ internal sealed partial class SettingsView
             _pScroll = Math.Clamp(_pScroll + steps, 0, maxPlayerScroll);
             Redraw();
         });
-        var pc = Columns(w, 9, 16, 8, 8, 15, 5, 5, 12, 12, 9);
+        var pw = _record.Players.Count > shownPlayers ? w - 8 : w;
+        var pc = Columns(pw, 9, 16, 8, 8, 15, 5, 5, 12, 12, 9);
         var ph = new[] { "UID", "이름", "직업", "이매진", "전투력", "요리", "시럽", "총 피해", "DPS", "지분" };
         for (var c = 0; c < ph.Length; c++)
             Text(playerRegion.transform, ph[c], pc[c].X + 4, 0, pc[c].W - 8, 20, 12, muted, c is 3 or 5 or 6 ? TextAlignmentOptions.Midline : c >= 4 ? TextAlignmentOptions.MidlineRight : TextAlignmentOptions.MidlineLeft); // cuisine and syrup: header and icon both centred
@@ -559,7 +564,7 @@ internal sealed partial class SettingsView
                 Dirty();
             });
             var box = row.transform.parent.gameObject;
-            UiKit.Place(box, 0, py, w, rowH - 2);
+            UiKit.Place(box, 0, py, pw, rowH - 2);
             row.text = "";
             var share = UiKit.Box("Share", box.transform, UiKit.Rgb(player.BarColor == 0 ? 0x4A90D9 : player.BarColor, 0.55f));
             var rt = UiKit.Rt(share.gameObject);
@@ -590,6 +595,7 @@ internal sealed partial class SettingsView
             py += rowH;
         }
 
+        ScrollBar(playerRegion.transform, w, 20, shownPlayers * rowH, _record.Players.Count, shownPlayers, _pScroll);
         var chosen = _record.Players.FirstOrDefault(p => p.Name == _selectedPlayer);
         top += 20 + shownPlayers * rowH + 16 + 8;
         if (chosen == null) return;
@@ -635,7 +641,7 @@ internal sealed partial class SettingsView
             if (file.Length == 0) continue; // nothing worn in that slot: leave it empty
             if (!file.EndsWith(".png", StringComparison.OrdinalIgnoreCase)) file += ".png";
             var image = UiKit.Box("Imagine_" + i, row, Color.white, raycast: true);
-            image.sprite = UiKit.LoadSprite(System.IO.Path.Combine(_root.AssetsRoot, _plugin, "assets", "imagines", file));
+            image.sprite = UiKit.LibraryPicture(System.IO.Path.Combine(_root.AssetsRoot, _plugin, "assets", "imagines", file));
             image.preserveAspect = true;
             if (image.sprite == null) image.color = new Color(1f, 1f, 1f, 0.35f);
             UiKit.Place(image.gameObject, left + i * (size + 2), (rowH - 2 - size) / 2, size, size);
@@ -751,7 +757,8 @@ internal sealed partial class SettingsView
             Redraw();
         });
         // UID | skill | damage | hits | crit | lucky | share
-        var cols = Columns(w, 10, 30, 14, 10, 12, 12, 12);
+        var sw = player.Skills.Count > visible ? w - 8 : w;
+        var cols = Columns(sw, 10, 30, 14, 10, 12, 12, 12);
         var names = new[] { "UID", "스킬", "피해", "타수", "치명", "행운", "지분" };
         for (var c = 0; c < names.Length; c++)
             Text(region.transform, names[c], cols[c].X + 4, 0, cols[c].W - 8, 20, 12, muted, c >= 2 ? TextAlignmentOptions.MidlineRight : TextAlignmentOptions.MidlineLeft);
@@ -764,7 +771,7 @@ internal sealed partial class SettingsView
             var s = player.Skills[i];
             var share = (double)s.Damage / total;
             var row = UiKit.Box("S" + i, region.transform, Row);
-            UiKit.Place(row.gameObject, 0, yy, w, rowH - 1);
+            UiKit.Place(row.gameObject, 0, yy, sw, rowH - 1);
             var bar = UiKit.Box("Bar", row.transform, new Color(0.9f, 0.6f, 0.2f, 0.35f));
             var rt = UiKit.Rt(bar.gameObject);
             rt.anchorMin = Vector2.zero;
@@ -787,6 +794,7 @@ internal sealed partial class SettingsView
             yy += rowH;
         }
 
+        ScrollBar(region.transform, w, 22, visible * rowH, player.Skills.Count, visible, _sScroll);
         if (player.Skills.Count == 0) Text(region.transform, "사용한 스킬 기록이 없습니다.", 6, yy, w - 12, 22, 13, muted);
     }
 
@@ -803,7 +811,8 @@ internal sealed partial class SettingsView
             Redraw();
         });
         // time | UID | buff | stacks | duration | cooldown | state
-        var cols = Columns(w, 8, 10, 30, 8, 12, 12, 8);
+        var fw = player.Buffs.Count > visible ? w - 8 : w;
+        var cols = Columns(fw, 8, 10, 30, 8, 12, 12, 8);
         var names = new[] { "시간", "UID", "버프", "중첩", "지속", "쿨타임", "상태" };
         for (var c = 0; c < names.Length; c++)
             Text(region.transform, names[c], cols[c].X + 4, 0, cols[c].W - 8, 20, 12, muted, c >= 3 ? TextAlignmentOptions.MidlineRight : TextAlignmentOptions.MidlineLeft);
@@ -814,7 +823,7 @@ internal sealed partial class SettingsView
         {
             var b = player.Buffs[i];
             var row = UiKit.Box("F" + i, region.transform, b.Active ? new Color(0.2f, 0.5f, 0.38f, 0.22f) : Row, raycast: true);
-            UiKit.Place(row.gameObject, 0, yy, w, rowH - 1);
+            UiKit.Place(row.gameObject, 0, yy, fw, rowH - 1);
             var description = _record.BuffInfo.FirstOrDefault(info => info.Name == b.Name)?.Description ?? "";
             if (description.Length > 0)
             {
@@ -839,12 +848,31 @@ internal sealed partial class SettingsView
             yy += rowH;
         }
 
+        ScrollBar(region.transform, w, 22, visible * rowH, player.Buffs.Count, visible, _bScroll);
         if (player.Buffs.Count == 0) Text(region.transform, "얻은 버프 기록이 없습니다.", 6, yy, w - 12, 22, 13, muted);
     }
     /// <summary>A panel inside the body that scrolls with the mouse wheel.</summary>
     // The list areas live as long as the window: a redraw in the middle of a drag must not destroy the object being dragged.
     readonly Dictionary<string, GameObject> _regions = new();
     readonly Dictionary<string, Action<int>> _regionScroll = new();
+
+    const double ListBarWidth = 3; // the thin bar at the right edge of every list that scrolls (as thin as the chat window's)
+
+    /// <summary>
+    /// The thin bar at the right edge of a list: its thumb is as long as the share of the rows that shows and sits where the list is scrolled to.
+    /// Nothing is drawn when every row fits. Call it after the rows are made, so the bar lies above them.
+    /// </summary>
+    void ScrollBar(Transform parent, double right, double y, double height, int total, int visible, int scroll)
+    {
+        if (total <= visible || height < 24) return;
+        var track = UiKit.Box("ScrollTrack", parent, new Color(1f, 1f, 1f, 0.10f));
+        var thumb = UiKit.Box("ScrollThumb", parent, new Color(1f, 1f, 1f, 0.5f));
+        var length = Math.Max(18, height * visible / total);
+        var max = total - visible;
+        var offset = (height - length) * Math.Clamp(scroll, 0, max) / max;
+        UiKit.Place(track.gameObject, right - ListBarWidth, y, ListBarWidth, height);
+        UiKit.Place(thumb.gameObject, right - ListBarWidth, y + offset, ListBarWidth, length);
+    }
 
     GameObject Region(string key, double x, double y, double w, double h, double rowHeight, Action<int> scroll)
     {

@@ -171,6 +171,7 @@ public sealed partial class GameCapture
                     ? 0
                     : new CodedInputStream(attr.RawData.ToByteArray()).ReadInt32();
                 NoteCombatant(uuid, state > 0);
+                if (uuid != 0 && uuid == Volatile.Read(ref _self)) LiveCombat.SetSelfInCombat(state > 0);
                 continue;
             }
 

@@ -31,10 +31,11 @@ static class GameChatInput
     /// <summary>The world chat channel (0 = not known); shown as a badge at the right end of the input bar.</summary>
     internal static int WorldNumber;
 
-    const float BadgeWidth = 66f; // in reference pixels
+    const float BadgeWidth = 78f; // in reference pixels (room for the crowd bullet at the left)
     static GameObject _badge;
     static Image _badgeBack;
     static TextMeshProUGUI _badgeText;
+    static Image _badgeDot; // the crowd of the world channel: green low, orange hot, red high
     static float _badgeFailUntil;
 
     /// <summary>The badge flashes red for a moment (the world channel could not be changed).</summary>
@@ -78,7 +79,21 @@ static class GameChatInput
             if (chat == null) return;
             if (wantHide)
             {
-                HideList(chat);
+                // the nodes are looked up once a second; between, only their opacity is held at zero (the game's animations may set it back)
+                var now = Time.realtimeSinceStartup;
+                if (chat != _hideChat || now >= _hideBuilt + 1f)
+                {
+                    (_hideChat, _hideBuilt) = (chat, now);
+                    HideList(chat);
+                }
+                else
+                    foreach (var group in _hidden)
+                        if (group != null && (group.alpha != 0f || group.blocksRaycasts))
+                        {
+                            group.alpha = 0f;
+                            group.blocksRaycasts = false;
+                        }
+
                 _listHidden = true;
             }
 
@@ -121,8 +136,12 @@ static class GameChatInput
         group.blocksRaycasts = false;
     }
 
+    static Transform _hideChat;
+    static float _hideBuilt;
+
     static void ShowList()
     {
+        _hideChat = null; // the nodes are looked up again the next time the list is hidden
         foreach (var group in _hidden)
         {
             if (group == null) continue;
@@ -209,7 +228,8 @@ static class GameChatInput
             press.onClick.AddListener((UnityAction)(() => ChannelKeypad.Toggle(_badge.transform.parent)));
             _badgeText = UiKit.Text("Text", _badge.transform, 18, Color.white, TextAlignmentOptions.Center);
             _badgeText.enableWordWrapping = false;
-            UiKit.Stretch(_badgeText.gameObject);
+            _badgeDot = UiKit.Box("Crowd", _badge.transform, Color.white);
+            _badgeDot.sprite = IconStrip.Disc();
         }
 
         _badge.SetActive(true);
@@ -219,6 +239,9 @@ static class GameChatInput
         _badgeBack.color = Time.realtimeSinceStartup < _badgeFailUntil ? new Color(0.7f, 0.2f, 0.2f, 0.95f) : new Color(0.17f, 0.15f, 0.12f, 0.92f);
         _badgeText.color = known ? new Color(1f, 0.78f, 0.45f, 1f) : new Color(0.62f, 0.64f, 0.7f, 1f);
         UiKit.SetText(_badgeText, known ? $"월드 ch{WorldNumber}" : "월드 ch?");
+        WorldChannelState.Poll(WorldNumber);
+        _badgeDot.color = WorldChannelState.Colour;
+        _badgeDot.gameObject.SetActive(known && WorldChannelState.Level > 0);
         var box = ScreenBox(back);
         var heightRef = Math.Max(16f, (box.Top - box.Bottom) / scale - 2f);
         _badgeText.fontSize = Math.Clamp(heightRef * 0.6f, 10f, 15f);
@@ -226,34 +249,59 @@ static class GameChatInput
         var x = (ours.Right - 3f * scale - BadgeWidth * scale) / scale;
         var y = (Screen.height - (barTop - 1f * scale)) / scale;
         UiKit.Place(_badge, x, y, BadgeWidth, heightRef);
+        const float dot = 8f;
+        UiKit.Place(_badgeDot.gameObject, 8f, (heightRef - dot) / 2f, dot, dot);
+        UiKit.Place(_badgeText.gameObject, 8f + dot + 2f, 0f, BadgeWidth - 8f - dot - 6f, heightRef); // the text takes what is right of the bullet
         ChannelKeypad.Follow(x, y);
     }
 
     const float Gap = 4f; // a few pixels of air between our window and the bar
     const float SideInset = 10f; // the bar is this much shorter on the left (reference pixels)
 
+    static readonly List<RectTransform> BarList = new(); // reused every frame: no new list per frame
+    static readonly List<(Transform Node, RectTransform Rect)> BarCache = new();
+    static Transform _barChat;
+    static float _barBuilt;
+    static Canvas _barCanvas, _anchorCanvas;
+    static RectTransform _barCanvasRect;
+
     static void PlaceBar(Transform chat)
     {
         var anchor = Anchor;
         if (anchor == null || !Shown(anchor)) return;
-        var parts = new List<RectTransform>();
-        foreach (var name in BarParts)
+        // the parts and the canvases are looked up once a second (each lookup into the game makes new objects); every frame only which parts are on is read
+        var now = Time.realtimeSinceStartup;
+        if (chat != _barChat || now >= _barBuilt + 1f || _barCanvas == null || _anchorCanvas == null)
         {
-            var node = GameChatUi.Find(chat, name);
-            var rect = node == null ? null : node.GetComponent<RectTransform>(); // "is RectTransform" does not work on the game's IL2CPP objects
-            if (rect != null && node.gameObject.activeInHierarchy) parts.Add(rect);
+            (_barChat, _barBuilt) = (chat, now);
+            BarCache.Clear();
+            foreach (var name in BarParts)
+            {
+                var node = GameChatUi.Find(chat, name);
+                var rect = node == null ? null : node.GetComponent<RectTransform>(); // "is RectTransform" does not work on the game's IL2CPP objects
+                if (rect != null) BarCache.Add((node, rect));
+            }
+
+            var own = chat.GetComponentInParent<Canvas>();
+            _barCanvas = own == null ? null : own.rootCanvas;
+            _barCanvasRect = _barCanvas == null ? null : _barCanvas.GetComponent<RectTransform>();
+            var anchored = anchor.GetComponentInParent<Canvas>();
+            _anchorCanvas = anchored == null ? null : anchored.rootCanvas;
         }
 
-        if (parts.Count == 0) return;
-        var canvas = chat.GetComponentInParent<Canvas>();
-        if (canvas == null) return;
-        canvas = canvas.rootCanvas;
+        var parts = BarList;
+        parts.Clear();
+        foreach (var (node, rect) in BarCache)
+            if (node != null && rect != null && node.gameObject.activeInHierarchy) parts.Add(rect);
+
+        if (parts.Count == 0 || _barCanvas == null || _anchorCanvas == null) return;
+        var canvas = _barCanvas;
         var camera = canvas.renderMode == RenderMode.ScreenSpaceOverlay ? null : canvas.worldCamera;
-        var canvasRect = canvas.GetComponent<RectTransform>();
+        var canvasRect = _barCanvasRect;
 
         // our window: the bar is as wide as it, and sits right under it
         var ours = ScreenBox(WindowOf(anchor)); // the whole window (its lower edge), not just the chat area inside it
-        var scale = Math.Max(0.1f, anchor.GetComponentInParent<Canvas>().rootCanvas.scaleFactor);
+        var scale = Math.Max(0.1f, _anchorCanvas.scaleFactor);
         FitWidth(parts, ours, BadgeWidth * scale, SideInset * scale);
         PlaceNotice(chat, ours, scale, canvasRect, camera);
 

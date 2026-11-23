@@ -8,7 +8,7 @@ public sealed class DpsMeterPlugin : IPlugin
 {
     private readonly MeterSession _session = new();
 
-    public PluginInfo Info { get; } = new("dps.meter", "미터기", "0.4.9");
+    public PluginInfo Info { get; } = new("dps.meter", "미터기", "0.4.10");
 
     public void Load(IPluginContext context)
     {
@@ -331,7 +331,7 @@ public sealed partial class MeterSession
     {
         var profession = BaseProfession(player.ProfessionId);
         if (profession is 9 or 12) return TankIcon;
-        if (player.Profession is "협주" or "치유") return HealerIcon;
+        if (PartyJobs.IsHealer(player.ProfessionId, player.Profession)) return HealerIcon; // a healer class without a known spec counts as a healer
         return DamageIcon;
     }
 

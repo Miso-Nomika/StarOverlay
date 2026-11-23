@@ -14,11 +14,15 @@ static class ChannelCycle
     static TMP_InputField _input;
     static bool _keyBroken;
 
+    static int _tabWatchUntil = -1;
+
     public static void Poll(Transform chat)
     {
         try
         {
-            RemoveTab(chat);
+            // the input's text is read (a new string every time) only around a press of the Tab key, the only time a tab character gets in
+            if (!_keyBroken && Input.GetKey(KeyCode.Tab)) _tabWatchUntil = Time.frameCount + 3;
+            if (Time.frameCount <= _tabWatchUntil) RemoveTab(chat);
             if (_keyBroken || !TabPressed()) return;
             var input = InputField(chat);
             if (input == null || !input.isFocused) return; // only while typing

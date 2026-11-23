@@ -241,9 +241,9 @@ public static class JapaneseScript
         var map = new Dictionary<string, string>(230000, StringComparer.Ordinal);
         var starts = new HashSet<char>();
         var max = 1;
-        using var stream = typeof(JapaneseScript).Assembly.GetManifestResourceStream("StarOverlay.Framework.Data.jp-lexicon.txt");
-        if (stream is null) return new Lexicon(map, starts, max);
-        using var reader = new StreamReader(stream);
+        var path = Path.Combine(AppContext.BaseDirectory, "jp-lexicon.txt"); // the word list is a file next to the program
+        if (!File.Exists(path)) return new Lexicon(map, starts, max);
+        using var reader = new StreamReader(path);
         while (reader.ReadLine() is { } line)
         {
             var tab = line.IndexOf('\t');

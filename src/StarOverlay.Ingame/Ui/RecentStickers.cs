@@ -19,7 +19,8 @@ static class RecentStickers
 
     static readonly List<string> Recent = new();
     static readonly List<string> Favorites = new();
-    static readonly HashSet<string> Seen = new(); // the lines already counted
+    static readonly HashSet<long> Seen = new(); // the sticker lines already counted
+    static readonly HashSet<long> Plain = new(); // the lines of the player without a sticker: not read again
     static bool _loaded;
 
     /// <summary>Raised on every change, so the box draws again.</summary>
@@ -95,9 +96,15 @@ static class RecentStickers
         var changed = false;
         foreach (var line in lines)
         {
-            if (!line.Self) continue;
+            if (!line.Self || Plain.Contains(line.Id) || Seen.Contains(line.Id)) continue;
             var code = StickerCache.NameOf(line.Text);
-            if (code == null || !Seen.Add(line.Id.ToString())) continue;
+            if (code == null)
+            {
+                Plain.Add(line.Id);
+                continue;
+            }
+
+            Seen.Add(line.Id);
             Recent.Remove(code);
             Recent.Insert(0, code);
             if (Recent.Count > Stored) Recent.RemoveRange(Stored, Recent.Count - Stored);
@@ -105,6 +112,7 @@ static class RecentStickers
         }
 
         if (Seen.Count > 600) Seen.Clear();
+        if (Plain.Count > 2000) Plain.Clear();
         if (!changed) return;
         Version++;
         Save("recent-stickers.txt", Recent);

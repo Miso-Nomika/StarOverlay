@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using StarOverlay.Ingame.Protocol;
 using TMPro;
 using UnityEngine;
@@ -29,9 +30,9 @@ internal sealed class IconStrip
     readonly Action<string> _remove;
     readonly UiRoot _ui;
     readonly List<Cell> _cells = new();
-    List<IconDto> _icons = new();
-    int _first;  // the first icon that is drawn (a list that is scrolled)
-    int _shown;  // how many icons are drawn from there
+    readonly List<TextMeshProUGUI> _headers = new(); // the titles above the columns of a grouped list
+    TextMeshProUGUI _badge;  // the short text at the right end of the title row
+    List<IconDto> _placed = new(); // the icon of every cell that is drawn, in the order of the cells
 
     /// <param name="press">Called with the key of a row that was pressed (only a pressable list has such rows).</param>
     public IconStrip(Transform parent, Action<string> press = null, Action<string> remove = null, UiRoot ui = null)
@@ -46,52 +47,140 @@ internal sealed class IconStrip
     public static (double Size, double Step) ListMetrics(WidgetDto widget)
     {
         var size = widget.IconSize > 0 ? widget.IconSize : ListIconSize;
-        return (size, size + Gap);
+        return (size, size + GapOf(widget));
     }
+
+    /// <summary>The space between two rows of a list: the one the plugin asked for, or the default.</summary>
+    static double GapOf(WidgetDto widget) => widget.IconGap >= 0 ? widget.IconGap : Gap;
+
+    const int DefaultHeaderSize = 14;
+
+    static int HeaderSizeOf(WidgetDto widget) => widget.HeaderSize > 0 ? widget.HeaderSize : DefaultHeaderSize;
+
+    /// <summary>The height of the titles above the columns of a grouped list (0 for a list without columns): the text size and a little room.</summary>
+    public static double HeaderHeightOf(WidgetDto widget) => Grouped(widget) ? Math.Max(14, HeaderSizeOf(widget) + 6) : 0;
+
+    /// <summary>A pressable list whose rows name a group (<see cref="IconDto.Group"/>) is drawn in columns, one per group side by side, each with its title above.</summary>
+    public static bool Grouped(WidgetDto widget) => widget.IconsClickable && widget.Icons.Any(icon => icon.Group.Length > 0);
+
+    static List<List<IconDto>> Columns(WidgetDto widget) => widget.Icons.GroupBy(icon => icon.Group).Select(group => group.ToList()).ToList();
+
+    /// <summary>How many rows a list has: its icons, or in columns the rows of the longest column (all columns scroll together).</summary>
+    public static int TotalRows(WidgetDto widget) => Grouped(widget) ? Columns(widget).Max(column => column.Count) : widget.Icons.Count;
 
     /// <summary>Lays the icons out from (0, y) in the width given; returns the height used. A list can show only <paramref name="count"/> rows from the row <paramref name="first"/> on.</summary>
     public double Apply(WidgetDto widget, double y, double width, int first = 0, int count = int.MaxValue)
     {
-        _icons = widget.Icons;
-        _first = Math.Clamp(first, 0, _icons.Count);
-        _shown = Math.Min(count, _icons.Count - _first);
         var list = widget.IconsClickable; // a pressable list: one wide row per icon with its name and on/off
         var size = widget.IconSize > 0 ? widget.IconSize : list ? ListIconSize : DefaultSize;
-        var perRow = list || widget.IconsVertical ? 1 : Math.Max(1, (int)((width + Gap) / (size + Gap)));
-        for (var i = 0; i < _shown; i++)
+        _placed = new List<IconDto>();
+        double used;
+        if (Grouped(widget))
         {
-            while (_cells.Count <= i) _cells.Add(new Cell(_parent, _press, _remove, _ui));
-            var x = i % perRow * (size + Gap);
-            var top = y + i / perRow * (size + Gap);
-            _cells[i].Place(x, top, size, list ? width : 0, list && widget.IconsRemovable);
-            _cells[i].Bind(_icons[_first + i], list, list && widget.IconsRemovable);
+            var columns = Columns(widget);
+            var rowCount = columns.Max(column => column.Count);
+            var head = HeaderHeightOf(widget);
+            var gap = GapOf(widget);
+            var firstRow = Math.Clamp(first, 0, rowCount);
+            var shownRows = Math.Min(count, rowCount - firstRow);
+            var columnWidth = (width - Gap * (columns.Count - 1)) / columns.Count;
+            for (var g = 0; g < columns.Count; g++)
+            {
+                while (_headers.Count <= g)
+                {
+                    var header = UiKit.Text("Group", _parent, 14, Color.white, TextAlignmentOptions.MidlineLeft);
+                    _headers.Add(header);
+                }
+
+                _headers[g].fontSize = HeaderSizeOf(widget);
+                UiKit.Place(_headers[g].gameObject, g * (columnWidth + Gap) + 4, y, columnWidth - 4, head);
+                UiKit.SetText(_headers[g], columns[g][0].Group);
+                _headers[g].gameObject.SetActive(true);
+                for (var r = 0; r < shownRows && firstRow + r < columns[g].Count; r++)
+                {
+                    var cell = CellAt(_placed.Count);
+                    cell.Place(g * (columnWidth + Gap), y + head + r * (size + gap), size, columnWidth, false);
+                    cell.Bind(columns[g][firstRow + r], true, false, true);
+                    _placed.Add(columns[g][firstRow + r]);
+                }
+            }
+
+            for (var g = columns.Count; g < _headers.Count; g++) _headers[g].gameObject.SetActive(false);
+            ApplyBadge(widget, y, width, head);
+            used = head + shownRows * (size + gap);
+        }
+        else
+        {
+            foreach (var header in _headers) header.gameObject.SetActive(false);
+            if (_badge != null) _badge.gameObject.SetActive(false);
+            var icons = widget.Icons;
+            var firstIcon = Math.Clamp(first, 0, icons.Count);
+            var shown = Math.Min(count, icons.Count - firstIcon);
+            var perRow = list || widget.IconsVertical ? 1 : Math.Max(1, (int)((width + Gap) / (size + Gap)));
+            for (var i = 0; i < shown; i++)
+            {
+                var cell = CellAt(i);
+                var x = i % perRow * (size + Gap);
+                var top = y + i / perRow * (size + Gap);
+                cell.Place(x, top, size, list ? width : 0, list && widget.IconsRemovable);
+                cell.Bind(icons[firstIcon + i], list, list && widget.IconsRemovable);
+                _placed.Add(icons[firstIcon + i]);
+            }
+
+            used = (shown == 0 ? 0 : (shown - 1) / perRow + 1) * (size + Gap);
         }
 
-        for (var i = _shown; i < _cells.Count; i++) _cells[i].Hide();
+        for (var i = _placed.Count; i < _cells.Count; i++) _cells[i].Hide();
         Tick();
-        var rows = _shown == 0 ? 0 : (_shown - 1) / perRow + 1;
-        return rows * (size + Gap);
+        return used;
+    }
+
+    /// <summary>The short text at the right end of the title row (for the list of presets: whether the character is in combat).</summary>
+    void ApplyBadge(WidgetDto widget, double y, double width, double head)
+    {
+        if (widget.Badge.Length == 0)
+        {
+            if (_badge != null) _badge.gameObject.SetActive(false);
+            return;
+        }
+
+        if (_badge == null)
+        {
+            _badge = UiKit.Text("Badge", _parent, 14, Color.white, TextAlignmentOptions.MidlineRight);
+        }
+
+        const double badgeWidth = 90;
+        _badge.fontSize = HeaderSizeOf(widget);
+        UiKit.Place(_badge.gameObject, width - badgeWidth - 4, y, badgeWidth, head);
+        UiKit.SetText(_badge, widget.Badge);
+        _badge.gameObject.SetActive(true);
+    }
+
+    Cell CellAt(int index)
+    {
+        while (_cells.Count <= index) _cells.Add(new Cell(_parent, _press, _remove, _ui));
+        return _cells[index];
     }
 
     public void Hide()
     {
         foreach (var cell in _cells) cell.Hide();
-        _icons = new List<IconDto>();
-        _first = 0;
-        _shown = 0;
+        foreach (var header in _headers) header.gameObject.SetActive(false);
+        if (_badge != null) _badge.gameObject.SetActive(false);
+        _placed = new List<IconDto>();
     }
 
     /// <summary>Every frame: the gauges and the time texts (a text is written only when its second changes).</summary>
     public void Tick()
     {
         var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-        for (var i = 0; i < _shown && i < _cells.Count && _first + i < _icons.Count; i++)
+        for (var i = 0; i < _placed.Count && i < _cells.Count; i++)
         {
-            _cells[i].Tick(_icons[_first + i], now);
+            _cells[i].Tick(_placed[i], now);
         }
     }
 
-    static Sprite Disc()
+    internal static Sprite Disc()
     {
         return _disc ??= Make(0f);
     }
@@ -143,6 +232,8 @@ internal sealed class IconStrip
         readonly GameObject _root;
         readonly GameObject _box;   // the square with the picture, the ring and the texts (the whole cell in a row of icons)
         readonly GameObject _hit;   // the row of a pressable list
+        readonly Image _accent;     // the bar at the left of the row that is the current one (a list in columns)
+        double _end, _rowWidth;
         readonly Image _hitBack;
         readonly TextMeshProUGUI _name;
         readonly TextMeshProUGUI _state;
@@ -157,7 +248,6 @@ internal sealed class IconStrip
         bool _dual; // the icon has two rings: the existing ring then takes the inner half of its width
         readonly Image _face;
         readonly Image _picture;
-        readonly TextMeshProUGUI _letter;
         readonly TextMeshProUGUI _center;
         readonly TextMeshProUGUI _corner;
         double _size;
@@ -208,8 +298,6 @@ internal sealed class IconStrip
             _picture = UiKit.Box("Picture", _face.transform, Color.white);
             _picture.preserveAspect = true;
             UiKit.Stretch(_picture.gameObject);
-            _letter = UiKit.Text("Letter", _face.transform, 20, new Color(1f, 1f, 1f, 0.5f), TextAlignmentOptions.Center);
-            UiKit.Stretch(_letter.gameObject);
             _center = UiKit.Text("Center", _box.transform, 16, Color.white, TextAlignmentOptions.Center);
             _corner = UiKit.Text("Corner", _box.transform, 12, Color.white, TextAlignmentOptions.BottomRight);
             var removeLabel = UiKit.Button("Remove", _root.transform, "✕", new Color(0.55f, 0.2f, 0.22f, 0.7f), () =>
@@ -219,6 +307,7 @@ internal sealed class IconStrip
             _removeButton = removeLabel.transform.parent.gameObject;
             removeLabel.fontSize = 14;
             if (ui != null) UiKit.Hover(_removeButton, () => ui.ShowTip(_removeButton, "목록에서 삭제"), () => ui.HideTip(_removeButton));
+            _accent = UiKit.Box("Accent", _root.transform, new Color(0.48f, 0.89f, 0.6f, 1f));
             _name = UiKit.Text("Name", _root.transform, 15, Color.white, TextAlignmentOptions.MidlineLeft);
             _state = UiKit.Text("State", _root.transform, 14, Color.white, TextAlignmentOptions.MidlineRight);
             Outline(_center);
@@ -247,8 +336,10 @@ internal sealed class IconStrip
             if (width > 0)
             {
                 var end = width - 6 - (removable ? RemoveSize + 6 : 0); // the delete button sits at the very end of the row
-                UiKit.Place(_name.gameObject, size + 8, 0, Math.Max(20, end - StateWidth - 4 - size - 8), size);
+                (_end, _rowWidth) = (end, width);
+                PlaceName(true);
                 UiKit.Place(_state.gameObject, end - StateWidth, 0, StateWidth, size);
+                UiKit.Place(_accent.gameObject, 0, 3, 3, Math.Max(4, size - 6));
                 UiKit.Place(_removeButton, width - 6 - RemoveSize, (size - RemoveSize) / 2, RemoveSize, RemoveSize);
                 _name.fontSize = (float)Math.Max(12, size * 0.42);
                 _state.fontSize = (float)Math.Max(11, size * 0.32);
@@ -259,10 +350,13 @@ internal sealed class IconStrip
             UiKit.Place(_corner.gameObject, 0, 0, size - 2, size - 1);
             _center.fontSize = (float)(size * 0.36);
             _corner.fontSize = (float)(size * 0.36);
-            _letter.fontSize = (float)(size * 0.45);
         }
 
         const double StateWidth = 44;
+
+        /// <summary>The name takes the row up to the state text; a row without a state text gives the name all the room.</summary>
+        void PlaceName(bool hasState) =>
+            UiKit.Place(_name.gameObject, _size + 8, 0, Math.Max(20, _end - (hasState ? StateWidth + 4 : 0) - _size - 8), _size);
 
         /// <summary>One ring: the whole width. Two rings: the existing one on the inner half (a smaller box with the inner ring picture), the outer one on the outer half.</summary>
         void LayoutRings()
@@ -274,7 +368,7 @@ internal sealed class IconStrip
             UiKit.Stretch(_face.gameObject, face, face, face, face);
         }
 
-        public void Bind(IconDto icon, bool list, bool removable)
+        public void Bind(IconDto icon, bool list, bool removable, bool compact = false)
         {
             _removeButton.SetActive(removable);
             _root.SetActive(true);
@@ -282,19 +376,21 @@ internal sealed class IconStrip
             _group.blocksRaycasts = list; // only a row of a pressable list takes the mouse
             _hit.SetActive(list);
             _name.gameObject.SetActive(list);
-            _state.gameObject.SetActive(list);
+            // a list in columns shows a state text only when a row has something to say; the current row has the bar at its left instead
+            var hasState = !compact || icon.State.Length > 0;
+            _state.gameObject.SetActive(list && hasState);
+            _accent.gameObject.SetActive(list && compact && !icon.Dim);
             if (list)
             {
                 _hitBack.color = icon.Dim ? new Color(0.35f, 0.35f, 0.4f, 0.22f) : new Color(0.2f, 0.5f, 0.35f, 0.32f);
                 UiKit.SetText(_name, icon.Name);
-                UiKit.SetText(_state, icon.Dim ? "<color=#9ea9bb>꺼짐</color>" : "<color=#7be39a>켜짐</color>");
+                PlaceName(hasState);
+                if (hasState) UiKit.SetText(_state, icon.State.Length > 0 ? icon.State : icon.Dim ? "<color=#9ea9bb>꺼짐</color>" : "<color=#7be39a>켜짐</color>");
             }
 
             var sprite = UiKit.Picture(icon.Image);
             _picture.sprite = sprite;
             _picture.gameObject.SetActive(sprite != null);
-            _letter.gameObject.SetActive(sprite == null);
-            UiKit.SetText(_letter, icon.Name.Length == 0 ? "" : icon.Name.Substring(0, 1));
             _gauge.color = UiKit.Rgb(icon.Color == 0 ? 0x4FC3F7 : icon.Color);
             var dual = icon.OuterColor != 0;
             if (dual != _dual || _track.sprite == null)

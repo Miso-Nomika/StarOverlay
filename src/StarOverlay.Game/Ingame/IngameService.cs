@@ -43,12 +43,28 @@ public sealed class IngameService : IDisposable
         _builder = new UiSnapshotBuilder(hooks, _layouts);
         AssetsRoot = assetsRoot;
         SkillRepeat.Changed += SendRepeat;
+        QuickPreset.Changed += SendPreset;
+        LiveParty.Changed += SendParty;
     }
 
 
     /// <summary>Tells the agent which skills to repeat while held (also right after it connects).</summary>
     void SendRepeat() =>
         Send(new Envelope { T = MessageType.Repeat, Repeat = new RepeatDto { Active = SkillRepeat.Active, Skills = SkillRepeat.Skills.ToList(), IntervalMs = SkillRepeat.IntervalMs } });
+
+    /// <summary>Tells the agent whether the quick preset plugin is on and which switch the player asked for (also right after it connects).</summary>
+    void SendPreset()
+    {
+        var (request, serial) = QuickPreset.Pending;
+        Send(new Envelope { T = MessageType.Preset, Preset = new PresetDto { Active = QuickPreset.Active, Request = request, Serial = serial, HaveItems = QuickPreset.Items.Count > 0 } });
+    }
+
+    /// <summary>Tells the agent whether the party join plugin is on, whose master score it is to read, and the answer the player gave to an application (also right after it connects).</summary>
+    void SendParty()
+    {
+        var (request, serial) = LiveParty.Pending;
+        Send(new Envelope { T = MessageType.Party, Party = new PartyDto { Active = LiveParty.Active, Need = LiveParty.Need.ToList(), Request = request, Serial = serial } });
+    }
 
     public string? AssetsRoot { get; }
 
@@ -163,6 +179,8 @@ public sealed class IngameService : IDisposable
         if (AssetsRoot is not null) Send(new Envelope { T = MessageType.Assets, Root = AssetsRoot });
         if (TablesRoot is not null) Send(new Envelope { T = MessageType.Tables, Root = TablesRoot });
         SendRepeat(); // a reconnecting agent learns the chosen skills again
+        SendPreset();
+        SendParty();
         lock (_state) _lastWindows = ""; // the new client gets everything again
         _connected = true;
         _dirty = true;
@@ -297,10 +315,48 @@ public sealed class IngameService : IDisposable
 
                 _dirty = true; // the candidate list of the plugin changed
                 break;
+            case MessageType.Cmd when message.Cmd is { Action: CommandAction.Presets } listed:
+                QuickPreset.SetItems(ParsePresets(listed.Value));
+                _dirty = true;
+                break;
+            case MessageType.Cmd when message.Cmd is { Action: CommandAction.PartyScores } scores:
+                LiveParty.NoteMasters(ParseMasters(scores.Value));
+                _dirty = true;
+                break;
+            case MessageType.Cmd when message.Cmd is { Action: CommandAction.PartyDealt } dealt:
+                LiveParty.NoteDealt(dealt.Key, dealt.Value == "ok", DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
+                _dirty = true;
+                break;
+            case MessageType.Cmd when message.Cmd is { Action: CommandAction.PresetFailed } failed:
+                QuickPreset.NoteFailed(failed.Key, failed.Value, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
+                _dirty = true;
+                break;
             case MessageType.Cmd when message.Cmd is not null:
                 Apply(message.Cmd);
                 _dirty = true;
                 break;
+        }
+    }
+
+    /// <summary>The master scores the agent sent: one per line, "charId|score|shown" (a bad line is skipped).</summary>
+    internal static IEnumerable<(long CharId, int Score, bool Shown)> ParseMasters(string? text)
+    {
+        foreach (var line in (text ?? "").Split('\n', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var parts = line.TrimEnd('\r').Split('|');
+            if (parts.Length < 3 || !long.TryParse(parts[0], out var id) || id == 0 || !int.TryParse(parts[1], out var score)) continue;
+            yield return (id, score, parts[2] != "0");
+        }
+    }
+
+    /// <summary>The presets the agent sent: one per line, "kind|id|name|state|icon" (a bad line is skipped; the icon may be missing).</summary>
+    internal static IEnumerable<PresetItem> ParsePresets(string? text)
+    {
+        foreach (var line in (text ?? "").Split('\n', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var parts = line.TrimEnd('\r').Split('|');
+            if (parts.Length < 4 || parts[0] is not ("mind" or "char") || !int.TryParse(parts[1], out var id) || parts[3] is not ("current" or "ready" or "empty" or "locked")) continue;
+            yield return new PresetItem(parts[0], id, parts[2], parts[3], parts.Length > 4 ? parts[4] : "");
         }
     }
 
@@ -379,6 +435,12 @@ public sealed class IngameService : IDisposable
                 var cut = cmd.Key.LastIndexOf(':');
                 if (cut > "step:".Length && int.TryParse(cmd.Key[(cut + 1)..], out var direction))
                     _hooks.Host.PressStep(cmd.Window, cmd.Key["step:".Length..cut], direction);
+                break;
+            case CommandAction.Press when cmd.Key.StartsWith("row:accept:", StringComparison.Ordinal):
+                LiveParty.RequestDeal(cmd.Key["row:accept:".Length..], true);
+                break;
+            case CommandAction.Press when cmd.Key.StartsWith("row:reject:", StringComparison.Ordinal):
+                LiveParty.RequestDeal(cmd.Key["row:reject:".Length..], false);
                 break;
             case CommandAction.Press when cmd.Key.StartsWith("icon-remove:", StringComparison.Ordinal):
                 _hooks.Host.RemoveIcon(cmd.Window, cmd.Key["icon-remove:".Length..]);

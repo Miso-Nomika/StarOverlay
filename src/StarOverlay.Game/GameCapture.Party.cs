@@ -124,22 +124,25 @@ public sealed partial class GameCapture
 
     void RememberApply(TeamJoinApplyListItem item)
     {
-        var people = new List<PartyApplicant>();
-        var seen = DateTime.UtcNow;
-        if (item.ApplicantList.Count > 0)
-        {
-            foreach (var display in item.ApplicantList)
-                AddApplicant(people, item, display, seen);
-        }
-        else if (item.ApplicantDisplay != null)
-        {
-            AddApplicant(people, item, item.ApplicantDisplay, seen);
-        }
-
+        var people = ApplicantsOf(item, DateTime.UtcNow);
         var key = item.ApplyId.Length > 0 ? item.ApplyId : people.FirstOrDefault()?.CharId.ToString() ?? "";
         if (key.Length == 0) return;
         LiveParty.Replace(key, people.ToArray());
         AttachSeen(people);
+    }
+
+    /// <summary>
+    /// Everyone an application names: the leader (<c>ApplicantDisplay</c>) and the members of its list. A merge application has the leader apart and
+    /// only the other people in the list (measured in the game: the leader "tminid" in the display, one member in the list), so the leader is added too, first;
+    /// someone named twice counts once.
+    /// </summary>
+    internal static List<PartyApplicant> ApplicantsOf(TeamJoinApplyListItem item, DateTime seen)
+    {
+        var people = new List<PartyApplicant>();
+        if (item.ApplicantDisplay != null) AddApplicant(people, item, item.ApplicantDisplay, seen, leaderOnly: true);
+        foreach (var display in item.ApplicantList)
+            AddApplicant(people, item, display, seen, leaderOnly: false);
+        return people;
     }
 
     void AttachSeen(List<PartyApplicant> people)
@@ -159,12 +162,17 @@ public sealed partial class GameCapture
         }
     }
 
-    static void AddApplicant(List<PartyApplicant> people, TeamJoinApplyListItem item, TeamApplyPlayerDisplay display, DateTime seen)
+    /// <summary>
+    /// Adds one applicant of an application. The leader's id (<c>ApplicantId</c>) stands in for a missing character id only when the application names the
+    /// leader alone: in a list of members it would give every member without an id the leader's id, and the members would count as one person. Two members
+    /// are the same person when their ids are the same, or, without an id, their names.
+    /// </summary>
+    internal static void AddApplicant(List<PartyApplicant> people, TeamJoinApplyListItem item, TeamApplyPlayerDisplay display, DateTime seen, bool leaderOnly)
     {
         var name = display.Name?.Trim() ?? "";
-        var charId = display.CharId != 0 ? display.CharId : item.ApplicantId;
+        var charId = display.CharId != 0 ? display.CharId : leaderOnly ? item.ApplicantId : 0;
         if (name.Length == 0 && charId == 0) return;
-        if (people.Any(person => person.CharId == charId && charId != 0)) return;
+        if (people.Any(person => charId != 0 ? person.CharId == charId : person.CharId == 0 && person.Name == name)) return;
         if (name.Length == 0) name = charId.ToString();
         people.Add(new PartyApplicant(
             item.ApplyId,

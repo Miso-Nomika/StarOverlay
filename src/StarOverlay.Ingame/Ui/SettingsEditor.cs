@@ -30,7 +30,7 @@ internal sealed partial class SettingsView
         var editor = EditorOf(dto);
         if (editor == null) return "";
         var sb = new StringBuilder();
-        sb.Append(_pickKey).Append(_pickTab).Append(_pickScroll).Append('|').Append(_digits).Append('|').Append(_eScroll).Append('|').Append(_cScroll).Append('|');
+        sb.Append(GameImages.Version).Append(_pickKey).Append(_pickTab).Append(_pickScroll).Append('|').Append(_digits).Append('|').Append(_eScroll).Append('|').Append(_cScroll).Append('|');
         foreach (var row in editor.EditRows)
         {
             sb.Append(row.Key).Append(':').Append(row.Name).Append(':').Append(row.Image);
@@ -77,12 +77,15 @@ internal sealed partial class SettingsView
             _eScroll = Math.Clamp(_eScroll + steps, 0, maxRows);
             Redraw();
         });
+        var ew = editor.EditRows.Count > visible ? bw - 8 : bw;
         var rowTop = 0.0;
         for (var i = _eScroll; i < Math.Min(editor.EditRows.Count, _eScroll + visible); i++)
         {
-            EditorRow(rowRegion.transform, editor, editor.EditRows[i], rowTop, bw, i > 0, i < editor.EditRows.Count - 1);
+            EditorRow(rowRegion.transform, editor, editor.EditRows[i], rowTop, ew, i > 0, i < editor.EditRows.Count - 1);
             rowTop += EditRowHeight;
         }
+
+        ScrollBar(rowRegion.transform, bw, 0, visible * EditRowHeight, editor.EditRows.Count, visible, _eScroll);
 
         var lower = listH + 6;
         var lowerH = bh - lower;
@@ -154,9 +157,15 @@ internal sealed partial class SettingsView
         string[] files;
         try
         {
-            files = System.IO.Directory.Exists(dir)
-                ? System.IO.Directory.GetFiles(dir, "*.png").Select(System.IO.Path.GetFileName).OrderBy(n => n, StringComparer.OrdinalIgnoreCase).ToArray()
-                : Array.Empty<string>();
+            // the bundled pictures, and the pictures the game has (their names are in _game.txt next to them)
+            var bundled = System.IO.Directory.Exists(dir)
+                ? System.IO.Directory.GetFiles(dir, "*.png").Select(System.IO.Path.GetFileName)
+                : Enumerable.Empty<string>();
+            var list = System.IO.Path.Combine(dir, "_game.txt");
+            var fromGame = System.IO.File.Exists(list)
+                ? System.IO.File.ReadAllLines(list).Select(line => line.Trim()).Where(line => line.Length > 0).Select(line => line + ".png")
+                : Enumerable.Empty<string>();
+            files = bundled.Concat(fromGame).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(n => n, StringComparer.OrdinalIgnoreCase).ToArray();
         }
         catch (Exception)
         {
@@ -167,7 +176,7 @@ internal sealed partial class SettingsView
         return files;
     }
 
-    /// <summary>The picture picker: no picture (the first letter), or one of the bundled buff / skill pictures, or one of the user's own.</summary>
+    /// <summary>The picture picker: no picture (an empty picture), or one of the bundled buff / skill pictures, or one of the user's own.</summary>
     void BuildPicker(WidgetDto editor, double bw, double bh)
     {
         var row = editor.EditRows.FirstOrDefault(r => r.Key == _pickKey);
@@ -187,7 +196,7 @@ internal sealed partial class SettingsView
         Tab("스킬", "Skills", 46);
         Tab("이매진", "Imagines", 56);
         Tab("모듈", "Modules", 46);
-        Btn(_body.transform, "그림 없음(글자)", x - 130, 0, 130, 26, Button, () =>
+        Btn(_body.transform, "그림 없음", x - 130, 0, 130, 26, Button, () =>
         {
             Edit(editor, _pickKey, "set:image=none");
             _pickKey = "";
@@ -196,7 +205,7 @@ internal sealed partial class SettingsView
 
         const double cell = 54;
         var files = PicturesOf(_pickTab);
-        var cols = Math.Max(1, (int)((bw - 4) / cell));
+        var cols = Math.Max(1, (int)((bw - 12) / cell)); // leaves a strip at the right edge for the bar
         var gridH = bh - 32;
         var visibleRows = Math.Max(1, (int)(gridH / cell));
         var totalRows = (files.Length + cols - 1) / cols;
@@ -229,11 +238,12 @@ internal sealed partial class SettingsView
             var holder = label.transform.parent.gameObject;
             UiKit.Place(holder, at % cols * cell + 2, at / cols * cell + 2, cell - 4, cell - 4);
             var picture = UiKit.Box("Thumb", holder.transform, Color.white);
-            picture.sprite = UiKit.LoadSprite(path);
+            picture.sprite = UiKit.LibraryPicture(path);
             picture.preserveAspect = true;
             UiKit.Stretch(picture.gameObject, 3, 3, 3, 3);
         }
 
+        ScrollBar(region.transform, bw, 0, gridH, totalRows, visibleRows, _pickScroll);
         if (totalRows > visibleRows)
             Text(_body.transform, $"{_pickScroll + 1}-{Math.Min(totalRows, _pickScroll + visibleRows)} / {totalRows}줄 (휠로 넘기기)", bw - 260, bh - 16, 256, 16, 11, new Color(0.62f, 0.68f, 0.76f, 1f), TextAlignmentOptions.MidlineRight);
     }
@@ -262,17 +272,20 @@ internal sealed partial class SettingsView
             _cScroll = Math.Clamp(_cScroll + steps, 0, maxCandidates);
             Redraw();
         });
+        var cw = editor.Candidates.Count > visible ? w - 8 : w;
         for (var i = _cScroll; i < Math.Min(editor.Candidates.Count, _cScroll + visible); i++)
         {
             var candidate = editor.Candidates[i];
             var row = UiKit.Box("Cand_" + candidate.Key, region.transform, Row);
-            UiKit.Place(row.gameObject, 0, (i - _cScroll) * rowH, w, rowH - 2);
+            UiKit.Place(row.gameObject, 0, (i - _cScroll) * rowH, cw, rowH - 2);
             Picture(row.transform, candidate.Image, 3, 2, rowH - 6);
-            Btn(row.transform, "+", w - 30, 2, 28, rowH - 6, ButtonOn, () => Edit(editor, candidate.Key, "add"));
-            Text(row.transform, Esc($"{candidate.Name} ({candidate.Key})"), rowH, 0, w - rowH - 34, rowH - 2, 13, Color.white);
+            Btn(row.transform, "+", cw - 30, 2, 28, rowH - 6, ButtonOn, () => Edit(editor, candidate.Key, "add"));
+            Text(row.transform, Esc($"{candidate.Name} ({candidate.Key})"), rowH, 0, cw - rowH - 34, rowH - 2, 13, Color.white);
             if (candidate.Detail.Length > 0)
-                Text(row.transform, Esc(candidate.Detail), w * 0.5, 0, w * 0.5 - 34, rowH - 2, 12, new Color(0.55f, 0.6f, 0.68f, 1f), TextAlignmentOptions.MidlineRight);
+                Text(row.transform, Esc(candidate.Detail), cw * 0.5, 0, cw * 0.5 - 34, rowH - 2, 12, new Color(0.55f, 0.6f, 0.68f, 1f), TextAlignmentOptions.MidlineRight);
         }
+
+        ScrollBar(region.transform, w, 0, visible * rowH, editor.Candidates.Count, visible, _cScroll);
     }
 
     void Keypad(WidgetDto editor, double x, double y, double w, double h)

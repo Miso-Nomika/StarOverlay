@@ -443,7 +443,7 @@ internal sealed class ChatPanel
                 var body = BodyText(line);
                 var isSticker = StickerCache.NameOf(line.Text) != null;
                 var bodyHeight = isSticker && StickerCache.Get(StickerCache.NameOf(line.Text)) != null ? StickerSize : Measure(line.Id + "|" + line.Roman.Length + "|" + line.Translation.Length, body, textWidth, _size);
-                var box = Pad + (IsSystem(line) ? 0 : _size * 1.3) + bodyHeight + ItemRowHeight(line.Links) + Pad;
+                var box = Pad + (IsSystem(line) ? 0 : _size * 1.3) + bodyHeight + Pad;
                 entries.Add((line, body, bodyHeight, box));
                 content += box + _gap + 4;
             }
@@ -615,35 +615,6 @@ internal sealed class ChatPanel
 
     static readonly List<ChatLinkDto> NoLinks = new();
 
-    const int MaxItemIcons = 6;
-    double ItemIconSize => Math.Max(28, _size * 2.0);
-
-    Sprite ItemSprite(ChatLinkDto link) =>
-        link.Icon.Length == 0 ? null : UiKit.LoadSprite(System.IO.Path.Combine(_ui.AssetsRoot, _window, "assets", "items", link.Icon + ".png"));
-
-    /// <summary>The height of the row of item pictures under a message (0 when none of its items has a picture).</summary>
-    double ItemRowHeight(List<ChatLinkDto> links)
-    {
-        for (var i = 0; i < links.Count && i < MaxItemIcons; i++)
-            if (ItemSprite(links[i]) != null) return ItemIconSize + 4;
-        return 0;
-    }
-
-    /// <summary>The pictures of the items of a message, left to right under its text.</summary>
-    void PlaceItemIcons(Bubble bubble, double top, double rowHeight)
-    {
-        var size = ItemIconSize;
-        for (var i = 0; i < MaxItemIcons; i++)
-        {
-            var sprite = rowHeight > 0 && i < bubble.Links.Count ? ItemSprite(bubble.Links[i]) : null;
-            var image = bubble.Icons[i];
-            image.gameObject.SetActive(sprite != null);
-            if (sprite == null) continue;
-            image.sprite = sprite;
-            UiKit.Place(image.gameObject, 6 + 8 + i * (size + 4), top, size, size);
-        }
-    }
-
     static Color QualityColor(int quality) => quality switch
     {
         <= 1 => Rgb(190, 190, 190),
@@ -661,10 +632,7 @@ internal sealed class ChatPanel
         var camera = canvas != null && canvas.renderMode != RenderMode.ScreenSpaceOverlay ? canvas.worldCamera : null; // the chat is drawn by the game's camera
         var index = TMP_TextUtilities.FindIntersectingLink(bubble.Body, new Vector3(screenPoint.x, screenPoint.y, 0f), camera);
         if (index < 0 || index >= bubble.Links.Count) return;
-        // the game's own link in its chat bubble is clicked when that bubble is still in the game's list (the card then carries the item's own
-        // data); otherwise the card is asked for by the item id
         var link = bubble.Links[index];
-        var name = link.Token.Length > 0 ? link.Token : link.Name;
         // best: the game's own data of this message (kept in its chat data whatever channel its windows show), opened the way its chat link does
         if (bubble.Source != null && ItemLink.Open(bubble.Source.Channel, bubble.Source.MsgId, link.ItemId))
         {
@@ -672,15 +640,8 @@ internal sealed class ChatPanel
             return;
         }
 
-        if (GameChatUi.ClickItemLink(bubble.Who, name))
-        {
-            ItemCardMover.Request(screenPoint); // the game opens the card at its own bubble: it is moved to where the user pressed
-            return;
-        }
-
-        // not among the bubbles the game keeps: look back through its list (a line without a person, like loot, has no bubble to find)
-        if (bubble.Who.Length > 0) CardSeeker.StartItem(bubble.Who, name, link.ItemId, screenPoint);
-        else GameItemTips.Show(link.ItemId, screenPoint);
+        // a line the game does not keep (a loot line, or a message older than the few the game's chat data holds): the item's own card by its id
+        GameItemTips.Show(link.ItemId, screenPoint);
     }
 
     Bubble Take(int index)
@@ -764,8 +725,7 @@ internal sealed class ChatPanel
         var charId = source?.CharId ?? 0;
         bubble.Links = links ?? NoLinks;
         var nameHeight = string.IsNullOrEmpty(nameText) ? 0 : _size * 1.3;
-        var itemRow = ItemRowHeight(bubble.Links);
-        var boxHeight = Pad + nameHeight + bodyHeight + itemRow + Pad;
+        var boxHeight = Pad + nameHeight + bodyHeight + Pad;
         var width = listWidth - 12;
         bubble.Root.SetActive(true);
         UiKit.Place(bubble.Edge.gameObject, 5, top - 1, width + 2, boxHeight + 2);
@@ -802,7 +762,6 @@ internal sealed class ChatPanel
             bubble.Body.gameObject.SetActive(false);
         }
         else bubble.Body.gameObject.SetActive(true);
-        PlaceItemIcons(bubble, top + Pad + nameHeight + bodyHeight, itemRow);
     }
 
     sealed class Bubble
@@ -821,7 +780,6 @@ internal sealed class ChatPanel
         public readonly Image CopyBack;
         public string Original = "";
         public List<ChatLinkDto> Links = NoLinks;
-        public readonly Image[] Icons = new Image[MaxItemIcons];
 
         public Bubble(Transform parent, Action<Bubble> copy, Action<Bubble> open, Action<Bubble, Vector2> item, Action<int> scroll)
         {
@@ -861,13 +819,6 @@ internal sealed class ChatPanel
                 }
             }));
             Body.gameObject.GetComponent<UnityEngine.EventSystems.EventTrigger>().triggers.Add(click);
-
-            for (var i = 0; i < Icons.Length; i++)
-            {
-                Icons[i] = UiKit.Box("ItemIcon" + i, Root.transform, Color.white);
-                Icons[i].preserveAspect = true;
-                Icons[i].gameObject.SetActive(false);
-            }
 
             var sticker = new GameObject("Sticker");
             sticker.transform.SetParent(Root.transform, false);

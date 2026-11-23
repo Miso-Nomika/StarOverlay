@@ -27,6 +27,8 @@ static class StickerCache
 
     internal static Texture2D Get(string name) => name != null && _textures.TryGetValue(name, out var texture) && texture != null ? texture : null;
 
+    static (List<ChatLineDto> Lines, int Count, int Version) _looked;
+
     public static void Poll()
     {
         if (Time.realtimeSinceStartup < _next) return;
@@ -35,6 +37,10 @@ static class StickerCache
         {
             var lines = GameChatUi.Lines;
             if (lines == null) return;
+            // the same lines and the same pictures as at the last look: nothing new to ask for (the names are read with a pattern match, line by line)
+            var signature = (lines, lines.Count, Version);
+            if (signature == _looked) return;
+            _looked = signature;
             var wanted = new List<string>();
             foreach (var line in lines)
             {

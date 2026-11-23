@@ -12,7 +12,7 @@ public sealed record InstallReport(bool Success, string Message, IReadOnlyList<s
 public static class ModInstaller
 {
     /// <summary>The plugins that are switched on after an install, folder name = plugin id.</summary>
-    public static readonly string[] StandardPlugins = ["dps.meter", "chat", "party.join", "buff.tracker", "skill.repeat"];
+    public static readonly string[] StandardPlugins = ["dps.meter", "chat", "party.join", "buff.tracker", "skill.repeat", "quick.preset"];
 
     public static InstallReport Install(string game, PayloadPaths payload, Func<string, bool>? isGameRunning = null, string? modHome = null)
     {
@@ -110,6 +110,7 @@ public static class ModInstaller
         var done = new List<string>();
         if (!Directory.Exists(pluginsFolder)) return done;
         var present = PluginFolders.List(modHome).ToDictionary(plugin => plugin.Id, StringComparer.OrdinalIgnoreCase);
+        var handled = new List<string>();
         foreach (var id in StandardPlugins)
         {
             var source = Path.Combine(pluginsFolder, id);
@@ -117,7 +118,12 @@ public static class ModInstaller
             if (dll is null) continue;
             if (!present.TryGetValue(id, out var existing))
             {
-                if (PluginFolders.TryImport(modHome, id, dll, out _)) done.Add(id);
+                if (PluginFolders.TryImport(modHome, id, dll, out _))
+                {
+                    done.Add(id);
+                    handled.Add(id);
+                }
+
                 continue;
             }
 
@@ -125,6 +131,16 @@ public static class ModInstaller
             File.Copy(dll, Path.Combine(folder, Path.GetFileName(dll)), overwrite: true);
             PluginLibrary.MirrorAssets(source, folder);
             done.Add(id + "(갱신)");
+            handled.Add(id);
+        }
+
+        // the pictures several plugins share are in the payload once: every plugin gets the ones it needs next to itself
+        var shared = SharedAssets.RootOf(pluginsFolder);
+        var after = PluginFolders.List(modHome).ToDictionary(plugin => plugin.Id, StringComparer.OrdinalIgnoreCase);
+        foreach (var id in handled)
+        {
+            if (!after.TryGetValue(id, out var plugin)) continue;
+            SharedAssets.Expand(shared, id, Path.Combine(plugin.Enabled ? ModLayout.PluginsDirectory(modHome) : ModLayout.DisabledDirectory(modHome), id));
         }
 
         return done;

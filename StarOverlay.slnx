@@ -16,6 +16,7 @@
     <Project Path="samples/StarOverlay.PartyJoin/StarOverlay.PartyJoin.csproj" />
     <Project Path="samples/StarOverlay.BuffTracker/StarOverlay.BuffTracker.csproj" />
     <Project Path="samples/StarOverlay.SkillRepeat/StarOverlay.SkillRepeat.csproj" />
+    <Project Path="samples/StarOverlay.QuickPreset/StarOverlay.QuickPreset.csproj" />
     <Project Path="samples/StarOverlay.Chat/StarOverlay.Chat.csproj" />
   </Folder>
 </Solution>

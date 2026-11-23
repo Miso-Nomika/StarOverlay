@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using StarOverlay.App.Services;
 using StarOverlay.Core.Mods;
+using StarOverlay.Core.Setup;
 using StarOverlay.Framework;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -115,7 +116,8 @@ public partial class ShellViewModel
         foreach (var dll in Directory.GetFiles(bundledDirectory, "*.dll", SearchOption.AllDirectories))
         {
             if (!PluginInspector.TryRead(dll, out var info, out _) || info is null) continue;
-            PluginLibrary.TryAdd(_libraryRoot, info.Id, dll, out _);
+            if (PluginLibrary.TryAdd(_libraryRoot, info.Id, dll, out _))
+                SharedAssets.Expand(SharedAssets.RootOf(bundledDirectory), info.Id, Path.Combine(_libraryRoot, info.Id)); // the pictures several plugins share
         }
 
         RefreshLibrary();

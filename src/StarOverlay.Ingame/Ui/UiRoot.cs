@@ -34,7 +34,7 @@ internal sealed class UiRoot
     {
         // hidden by a group (alpha 0, no clicks), never by switching the canvas object off and on: the game walks through the canvases it
         // finds and switches them as it likes, and a canvas that is off at that moment is not brought back by it
-        foreach (var group in new[] { _group, _chatGroup, _windowsGroup })
+        foreach (var group in new[] { _group, _chatGroup, _windowsGroup, _settingsGroup })
         {
             if (group == null) continue;
             group.alpha = visible ? 1f : 0f;
@@ -63,10 +63,11 @@ internal sealed class UiRoot
             if (!Canvas.enabled) Canvas.enabled = true;
             if (ChatCanvas != null && !ChatCanvas.enabled) ChatCanvas.enabled = true;
             if (WindowsCanvas != null && !WindowsCanvas.enabled) WindowsCanvas.enabled = true;
+            if (SettingsCanvas != null && !SettingsCanvas.enabled) SettingsCanvas.enabled = true;
 
             var top = 0;
             foreach (var other in UnityEngine.Object.FindObjectsOfType<Canvas>())
-                if (other != null && other != Canvas && other != ChatCanvas && other != WindowsCanvas && other.isRootCanvas && other.enabled && other.sortingOrder > top) top = other.sortingOrder;
+                if (other != null && other != Canvas && other != ChatCanvas && other != WindowsCanvas && other != SettingsCanvas && other.isRootCanvas && other.enabled && other.sortingOrder > top) top = other.sortingOrder;
             if (Canvas.sortingOrder <= top) Canvas.sortingOrder = top + 1;
 
         }
@@ -97,6 +98,11 @@ internal sealed class UiRoot
     const int WindowsOrder = 591;
     GameObject _windowsObject;
     CanvasGroup _windowsGroup;
+    // The settings windows (and the notes) are over everything of the game, the item card at 2710 included: a window to be worked in must not be
+    // covered by the game's screens. Own canvas, same camera.
+    const int SettingsOrder = 3000;
+    GameObject _settingsObject;
+    CanvasGroup _settingsGroup;
     float _nextTabCheck;
     bool _tabOpen;
     GameObject _chatObject;
@@ -132,6 +138,12 @@ internal sealed class UiRoot
     /// <summary>The camera canvas of every window but the chat (null until the game's camera is known).</summary>
     public Canvas WindowsCanvas { get; private set; }
 
+    /// <summary>The camera canvas of the settings windows and the notes, over every screen of the game (null until the game's camera is known).</summary>
+    public Canvas SettingsCanvas { get; private set; }
+
+    /// <summary>Where the settings windows are drawn: their canvas once the game's camera is known, before that the overlay canvas.</summary>
+    public Transform SettingsParent => SettingsCanvas != null ? SettingsCanvas.transform : Canvas.transform;
+
     /// <summary>Where the window of a plugin is drawn: on the camera canvases once the game's camera is known (the chat on its own), before that on the overlay canvas.</summary>
     public Transform ParentOf(string id) => id == "chat" ? (ChatCanvas != null ? ChatCanvas.transform : Canvas.transform) : SharedParent;
 
@@ -141,7 +153,7 @@ internal sealed class UiRoot
     /// <summary>Makes the camera canvases (the chat's and the other windows') as soon as the game's root canvas (and its camera) exists; keeps them on that camera.</summary>
     void EnsureChatCanvas()
     {
-        if (ChatCanvas != null && ChatCanvas.worldCamera != null && WindowsCanvas != null && WindowsCanvas.worldCamera != null) return;
+        if (ChatCanvas != null && ChatCanvas.worldCamera != null && WindowsCanvas != null && WindowsCanvas.worldCamera != null && SettingsCanvas != null && SettingsCanvas.worldCamera != null) return;
         if (Time.realtimeSinceStartup < _nextChatSearch) return;
         _nextChatSearch = Time.realtimeSinceStartup + 0.5f;
         try
@@ -163,7 +175,14 @@ internal sealed class UiRoot
                     _windowsObject.layer = game.gameObject.layer;
                 }
 
-                foreach (var ours in new[] { ChatCanvas, WindowsCanvas })
+                if (_settingsObject == null)
+                {
+                    _settingsObject = MakeCanvas("StarOverlaySettingsCanvas", SettingsOrder, out var canvas, out _settingsGroup);
+                    SettingsCanvas = canvas;
+                    _settingsObject.layer = game.gameObject.layer;
+                }
+
+                foreach (var ours in new[] { ChatCanvas, WindowsCanvas, SettingsCanvas })
                 {
                     ours.renderMode = RenderMode.ScreenSpaceCamera;
                     ours.worldCamera = game.worldCamera;
@@ -271,7 +290,7 @@ internal sealed class UiRoot
         if (anchor == null || string.IsNullOrEmpty(text) || Canvas == null) return;
         if (_tip == null)
         {
-            _tip = UiKit.Node("Tooltip", SharedParent);
+            _tip = UiKit.Node("Tooltip", SettingsParent);
             var back = UiKit.Box("Back", _tip.transform, new Color(0.04f, 0.05f, 0.07f, 0.96f));
             UiKit.Stretch(back.gameObject);
             _tipText = UiKit.Text("Text", _tip.transform, 14, Color.white, TMPro.TextAlignmentOptions.MidlineLeft);
@@ -313,8 +332,16 @@ internal sealed class UiRoot
         return longest * 13.0;
     }
 
+    int _imagesSeen;
+
     public void Tick()
     {
+        if (_imagesSeen != GameImages.Version)
+        {
+            _imagesSeen = GameImages.Version;
+            Apply(_last); // a picture of the game just arrived: the windows are drawn again with it
+        }
+
         foreach (var view in _settings.Values) view.Tick();
         foreach (var window in _windows.Values) window.Tick();
         if (_tip != null && _tip.activeSelf && (_tipOwner == null || !_tipOwner.activeInHierarchy)) _tip.SetActive(false); // the icon went away while hovered
@@ -325,11 +352,15 @@ internal sealed class UiRoot
         if (WindowsCanvas != null)
         {
             foreach (var pair in _windows) if (pair.Key != "chat") pair.Value.MoveTo(WindowsCanvas.transform);
-            foreach (var view in _settings.Values) view.MoveTo(WindowsCanvas.transform);
-            if (_tip != null && _tip.transform.parent != WindowsCanvas.transform)
+        }
+
+        if (SettingsCanvas != null)
+        {
+            foreach (var view in _settings.Values) view.MoveTo(SettingsCanvas.transform);
+            if (_tip != null && _tip.transform.parent != SettingsCanvas.transform) // the notes are over the settings windows too
             {
-                _tip.transform.SetParent(WindowsCanvas.transform, false);
-                UiKit.SetLayer(_tip, WindowsCanvas.gameObject.layer);
+                _tip.transform.SetParent(SettingsCanvas.transform, false);
+                UiKit.SetLayer(_tip, SettingsCanvas.gameObject.layer);
             }
         }
 
@@ -354,7 +385,7 @@ internal sealed class UiRoot
     {
         var system = UnityEngine.EventSystems.EventSystem.current;
         var selected = system != null ? system.currentSelectedGameObject : null;
-        if (selected != null && Canvas != null && (selected.transform.IsChildOf(Canvas.transform) || (ChatCanvas != null && selected.transform.IsChildOf(ChatCanvas.transform)) || (WindowsCanvas != null && selected.transform.IsChildOf(WindowsCanvas.transform))))
+        if (selected != null && Canvas != null && (selected.transform.IsChildOf(Canvas.transform) || (ChatCanvas != null && selected.transform.IsChildOf(ChatCanvas.transform)) || (WindowsCanvas != null && selected.transform.IsChildOf(WindowsCanvas.transform)) || (SettingsCanvas != null && selected.transform.IsChildOf(SettingsCanvas.transform))))
             system.SetSelectedGameObject(null);
     }
 

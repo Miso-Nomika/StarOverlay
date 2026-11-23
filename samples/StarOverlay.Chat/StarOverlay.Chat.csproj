@@ -11,8 +11,5 @@
     <ProjectReference Include="..\..\src\StarOverlay.Framework\StarOverlay.Framework.csproj" />
   </ItemGroup>
 
-  <ItemGroup>
-    <Content Include="assets\items\*.png" Link="assets\items\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
-  </ItemGroup>
 
 </Project>

@@ -14,7 +14,7 @@ public sealed class BuffTrackerPlugin : IPlugin
     TrackerModel? _model;
     Timer? _sampler;
 
-    public PluginInfo Info { get; } = new("buff.tracker", "버프 트래커", "0.4.9");
+    public PluginInfo Info { get; } = new("buff.tracker", "버프 트래커", "0.4.10");
 
     public void Load(IPluginContext context)
     {

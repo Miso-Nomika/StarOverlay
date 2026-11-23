@@ -1,5 +1,5 @@
 ﻿# Builds the one file users download: artifacts\release\StarOverlay.exe (self-contained, no .NET needed, the install files inside).
-#   build\release.ps1 -Version 0.4.9
+#   build\release.ps1 -Version 0.4.10
 param([Parameter(Mandatory = $true)][string]$Version, [switch]$Dev) # -Dev: a development build (tools of DevTools.cs, file name ends in -dev); never upload it
 $ErrorActionPreference = 'Stop'
 $userDotnet = Join-Path $env:USERPROFILE '.dotnet'

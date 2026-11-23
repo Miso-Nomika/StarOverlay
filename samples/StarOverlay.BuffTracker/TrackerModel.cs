@@ -13,7 +13,7 @@ public sealed class TrackedBuff
 
     [JsonPropertyName("stacks")] public bool Stacks { get; set; } = true;
 
-    /// <summary>"none" (no picture: the first letter of the name), "lib:Modules/&lt;name&gt;.png", "lib:Skills/&lt;name&gt;.png" or "lib:Imagines/&lt;name&gt;.png" (the bundled library) or "file:&lt;name&gt;.png" (a picture in assets\custom).</summary>
+    /// <summary>"none" (no picture: an empty picture), "lib:Modules/&lt;name&gt;.png", "lib:Skills/&lt;name&gt;.png" or "lib:Imagines/&lt;name&gt;.png" (the bundled library) or "file:&lt;name&gt;.png" (a picture in assets\custom).</summary>
     [JsonPropertyName("image")] public string Image { get; set; } = "none";
 
     /// <summary>"none", "ring" (empties with the time) or "ring-reverse" (fills with the time).</summary>

@@ -54,6 +54,7 @@ public static class LiveCombat
     static long _scheduledEndTicks;
     static int _combatEpoch;
     static int _combatArm;
+    static int _selfInCombat;
     static long _startedTicks = DateTime.UtcNow.Ticks;
 
     static int _encounters;
@@ -100,6 +101,11 @@ public static class LiveCombat
     public static int CombatEpoch => Volatile.Read(ref _combatEpoch);
 
     public static int CombatArm => Volatile.Read(ref _combatArm);
+
+    /// <summary>Whether the player's own character is in combat now (its combat state attribute is above zero); presets cannot be switched then.</summary>
+    public static bool SelfInCombat => Volatile.Read(ref _selfInCombat) != 0;
+
+    public static void SetSelfInCombat(bool value) => Volatile.Write(ref _selfInCombat, value ? 1 : 0);
 
     public static bool EndPending
     {
@@ -191,6 +197,7 @@ public static class LiveCombat
         _scheduledEndTicks = 0;
         _combatEpoch = 0;
         _combatArm = 0;
+        _selfInCombat = 0;
         _recordExtra = 0;
         _vaultFifthOnly = 0;
         _encounters = 0;

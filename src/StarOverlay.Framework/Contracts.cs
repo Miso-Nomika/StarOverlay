@@ -54,7 +54,11 @@ public sealed record MeterRowView(
     bool Cuisine = false,
     bool Syrup = false,
     string CuisineEffect = "",
-    string SyrupEffect = "");
+    string SyrupEffect = "",
+    IReadOnlyList<RowAction>? Actions = null);
+
+/// <summary>A button at the end of a list row: pressing it asks the service to run <paramref name="Key"/> ("accept:&lt;id&gt;" and the like). <paramref name="Icon"/> ("check" or "cross") is drawn on the button instead of the text <paramref name="Label"/>.</summary>
+public sealed record RowAction(string Label, string Key, int Color, string Icon = "");
 
 public sealed record DamageSampleView(int Second, long Damage, double PerSecond);
 
@@ -112,7 +116,9 @@ public sealed record IconView(
     int StacksAlpha = 100,
     long OuterEndsAtMs = 0,
     long OuterTotalMs = 0,
-    int OuterColor = 0);
+    int OuterColor = 0,
+    string State = "",
+    string Group = "");
 
 public sealed record EditFieldView(string Name, string Label, string Value, bool Toggle);
 
@@ -130,7 +136,7 @@ public interface IUiRegistry
     /// "꺼짐" for a dimmed icon) and pressing a row calls it with the icon's key. With <paramref name="remove"/> each row also has a delete button
     /// (no question asked) that calls it with the icon's key.
     /// </summary>
-    void AddIcons(string id, Func<IReadOnlyList<IconView>> icons, Func<int>? size = null, Func<bool>? vertical = null, Action<string>? click = null, Action<string>? remove = null);
+    void AddIcons(string id, Func<IReadOnlyList<IconView>> icons, Func<int>? size = null, Func<bool>? vertical = null, Action<string>? click = null, Action<string>? remove = null, Func<int>? gap = null, Func<int>? headerSize = null, Func<string>? badge = null);
 
     void AddEditor(
         string id,
@@ -146,7 +152,7 @@ public interface IUiRegistry
 
     void AddMeter(string id, Func<IReadOnlyList<MeterRowView>> rows, Func<int>? rowHeight = null, Func<int>? textSize = null);
 
-    void AddList(string id, Func<IReadOnlyList<MeterRowView>> rows, string empty);
+    void AddList(string id, Func<IReadOnlyList<MeterRowView>> rows, string empty, Func<int>? rowHeight = null);
 
     void AddChat(string id, Func<IReadOnlyList<ChatLineView>> lines, string empty, Func<int>? textSize = null, Func<int>? lineGap = null);
 

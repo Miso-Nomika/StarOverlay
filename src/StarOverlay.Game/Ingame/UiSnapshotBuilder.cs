@@ -119,7 +119,7 @@ public sealed class UiSnapshotBuilder(IIngameHooks hooks, LayoutStore layouts)
 
             foreach (var icons in host.Icons.Where(i => i.PluginId == id))
             {
-                var widget = new WidgetDto { Kind = WidgetKind.Icons, Id = icons.Id, IconSize = Safe(icons.Size, 0), IconsVertical = SafeFlag(icons.Vertical), IconsClickable = icons.Click != null, IconsRemovable = icons.Remove != null };
+                var widget = new WidgetDto { Kind = WidgetKind.Icons, Id = icons.Id, IconSize = Safe(icons.Size, 0), IconsVertical = SafeFlag(icons.Vertical), IconsClickable = icons.Click != null, IconsRemovable = icons.Remove != null, IconGap = Safe(icons.Gap, -1), HeaderSize = Safe(icons.HeaderSize, 0), Badge = icons.Badge == null ? "" : Safe(icons.Badge) };
                 foreach (var icon in Safe(icons.Icons))
                     widget.Icons.Add(new IconDto
                     {
@@ -140,6 +140,8 @@ public sealed class UiSnapshotBuilder(IIngameHooks hooks, LayoutStore layouts)
                         OuterEndsAtMs = icon.OuterEndsAtMs,
                         OuterTotalMs = icon.OuterTotalMs,
                         OuterColor = icon.OuterColor,
+                        State = icon.State,
+                        Group = icon.Group,
                     });
                 window.Widgets.Add(widget);
             }
@@ -199,10 +201,11 @@ public sealed class UiSnapshotBuilder(IIngameHooks hooks, LayoutStore layouts)
         "chat" => "채팅",
         "buff.tracker" => "버프 트래커",
         "skill.repeat" => "연속 입력",
+        "quick.preset" => "빠른 프리셋",
         _ => pluginId,
     };
 
-    const double RootDefaultWidth = 0.1790625, RootDefaultHeight = 0.161;
+    const double RootDefaultWidth = 0.1801042, RootDefaultHeight = 0.1304444;
 
     WindowDto Root(int index)
     {
@@ -230,9 +233,13 @@ public sealed class UiSnapshotBuilder(IIngameHooks hooks, LayoutStore layouts)
     }
 
     static double DefaultWidth(WindowDto window) =>
+        window.Id == "quick.preset" ? 0.1643750 :
+        window.Id == "party.join" ? 0.2189583 :
         window.Widgets.Any(w => w.Kind == WidgetKind.Chat) ? 0.26 : window.Widgets.Any(w => w.Kind is WidgetKind.Meter or WidgetKind.List) ? 0.22 : 0.18;
 
     static double DefaultHeight(WindowDto window) =>
+        window.Id == "quick.preset" ? 0.1631481 : // two columns of up to eight rows
+        window.Id == "party.join" ? 0.1287037 :
         window.Widgets.Any(w => w.Kind == WidgetKind.Chat) ? 0.34 : window.Widgets.Any(w => w.Kind is WidgetKind.Meter or WidgetKind.List) ? 0.3 : 0.12;
 
     static RowDto ToRow(MeterRowView row) => new()
@@ -251,6 +258,7 @@ public sealed class UiSnapshotBuilder(IIngameHooks hooks, LayoutStore layouts)
         CuisineEffect = row.CuisineEffect ?? "",
         SyrupEffect = row.SyrupEffect ?? "",
         Imagines = row.Imagines.Select(i => new ImagineDto { Name = i.Name, Tier = i.Tier, Icon = i.Icon }).ToList(),
+        Actions = (row.Actions ?? []).Select(a => new RowActionDto { Label = a.Label, Key = a.Key, Color = a.Color, Icon = a.Icon }).ToList(),
     };
 
     static SettingDto ToSetting(PluginSetting setting)
@@ -317,13 +325,6 @@ public sealed class UiSnapshotBuilder(IIngameHooks hooks, LayoutStore layouts)
             ? lines
             : lines.Where(line => !(line.Channel == LiveChat.WorldChannelName && line.World > 0 && line.World != worldChannel)).ToList();
 
-    static string IconName(string? path)
-    {
-        if (string.IsNullOrEmpty(path)) return "";
-        var slash = path.LastIndexOf('/');
-        return slash >= 0 ? path[(slash + 1)..] : path;
-    }
-
     public static ChatLineDto ToChatLine(ChatLineView line, string roman, string translation) => new()
     {
         Id = LineId(line),
@@ -345,7 +346,6 @@ public sealed class UiSnapshotBuilder(IIngameHooks hooks, LayoutStore layouts)
                 ItemId = link.ItemId,
                 Name = ItemBook.NameOf(link.ItemId),
                 Quality = item?.Quality ?? 0,
-                Icon = IconName(item?.Icon),
                 Token = "[" + ItemBook.NameOf(link.ItemId) + "]",
             };
         }).ToList(),

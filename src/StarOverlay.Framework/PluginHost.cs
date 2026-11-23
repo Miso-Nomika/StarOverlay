@@ -23,7 +23,7 @@ public sealed record PluginEncounterLog(
     Func<IReadOnlyList<EncounterHead>>? Heads = null,
     Func<string, EncounterView?>? Open = null);
 
-public sealed record PluginIcons(string PluginId, string Id, Func<IReadOnlyList<IconView>> Icons, Func<int>? Size = null, Func<bool>? Vertical = null, Action<string>? Click = null, Action<string>? Remove = null);
+public sealed record PluginIcons(string PluginId, string Id, Func<IReadOnlyList<IconView>> Icons, Func<int>? Size = null, Func<bool>? Vertical = null, Action<string>? Click = null, Action<string>? Remove = null, Func<int>? Gap = null, Func<int>? HeaderSize = null, Func<string>? Badge = null);
 
 public sealed record PluginEditor(
     string PluginId,
@@ -329,8 +329,8 @@ public sealed class PluginHost : IDisposable
 
     private sealed class HostUi(string pluginId, PluginHost host) : IUiRegistry
     {
-        public void AddIcons(string id, Func<IReadOnlyList<IconView>> icons, Func<int>? size = null, Func<bool>? vertical = null, Action<string>? click = null, Action<string>? remove = null) =>
-            host.AddIcons(new PluginIcons(pluginId, id, icons, size, vertical, click, remove));
+        public void AddIcons(string id, Func<IReadOnlyList<IconView>> icons, Func<int>? size = null, Func<bool>? vertical = null, Action<string>? click = null, Action<string>? remove = null, Func<int>? gap = null, Func<int>? headerSize = null, Func<string>? badge = null) =>
+            host.AddIcons(new PluginIcons(pluginId, id, icons, size, vertical, click, remove, gap, headerSize, badge));
 
         public void AddEditor(string id, string title, Func<IReadOnlyList<EditRowView>> rows, Func<IReadOnlyList<EditCandidateView>> candidates, Action<EditOp> changed) =>
             host.AddEditor(new PluginEditor(pluginId, id, title, rows, candidates, changed));
@@ -347,8 +347,8 @@ public sealed class PluginHost : IDisposable
         public void AddMeter(string id, Func<IReadOnlyList<MeterRowView>> rows, Func<int>? rowHeight = null, Func<int>? textSize = null) =>
             host.AddMeter(new PluginMeter(pluginId, id, rows, rowHeight, TextSize: textSize));
 
-        public void AddList(string id, Func<IReadOnlyList<MeterRowView>> rows, string empty) =>
-            host.AddMeter(new PluginMeter(pluginId, id, rows, null, empty, false));
+        public void AddList(string id, Func<IReadOnlyList<MeterRowView>> rows, string empty, Func<int>? rowHeight = null) =>
+            host.AddMeter(new PluginMeter(pluginId, id, rows, rowHeight, empty, false));
 
         public void AddChat(string id, Func<IReadOnlyList<ChatLineView>> lines, string empty, Func<int>? textSize = null, Func<int>? lineGap = null) =>
             host.AddChat(new PluginChat(pluginId, id, lines, empty, textSize, lineGap));
