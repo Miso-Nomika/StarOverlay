@@ -61,15 +61,22 @@ internal sealed class AgentContext : ApplicationContext, IIngameHooks
 
     public IReadOnlyList<PluginFolder> Plugins() => PluginFolders.List(_home);
 
+    /// <summary>
+    /// Switches one plugin on or off. Only that plugin is loaded or unloaded: the others keep running as they are (their records, lists and timers go on), so
+    /// the plugins do not depend on each other and switching one does not touch another.
+    /// </summary>
     public void SetPluginEnabled(string pluginId, bool enabled) =>
         _owner.BeginInvoke(() =>
         {
-            if (!PluginFolders.TrySetEnabled(_home, pluginId, enabled, out _)) return;
-            var old = _host;
-            var next = new PluginHost();
-            next.LoadDirectory(_home, ModLayout.PluginsDirectory(_home));
-            _host = next;
-            old.Dispose();
+            var folder = Path.Combine(ModLayout.PluginsDirectory(_home), pluginId);
+            if (!enabled) _host.Unload(pluginId); // it stops first, then its folder moves away
+            if (!PluginFolders.TrySetEnabled(_home, pluginId, enabled, out _))
+            {
+                if (!enabled) _host.LoadFolder(_home, folder); // the folder could not be moved: it keeps running
+                return;
+            }
+
+            if (enabled) _host.LoadFolder(_home, folder);
         });
 
     // settings and the translation prompt are drawn inside the game by the agent; the service opens no window of its own

@@ -14,7 +14,7 @@ namespace StarOverlay.Ingame;
 /// The in-game agent. It draws what the Host service tells it to and reports what the user pressed.
 /// It does nothing when bpsr\ingame.off exists, and a failure in it must never reach the game.
 /// </summary>
-[BepInPlugin("staroverlay.ingame", "Star Overlay in-game", "0.4.10")]
+[BepInPlugin("staroverlay.ingame", "Star Overlay in-game", "0.4.11")]
 public class Plugin : BasePlugin
 {
     internal static ManualLogSource L;

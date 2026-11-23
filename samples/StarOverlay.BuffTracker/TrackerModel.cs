@@ -34,7 +34,7 @@ public sealed class TrackedBuff
 public sealed class TrackerModel(Func<string?> read, Action<string> write, string customDirectory, Func<long> nowMs)
 {
     public const string ItemsKey = "items";
-    public const long RecentMs = 300_000;
+    public const long RecentMs = 120_000;
     const int MaxCandidates = 30;
 
     /// <summary>How opaque (percent) the picture of a buff that is there is drawn; 100 when not set. The time and the stacks have their own.</summary>
@@ -78,14 +78,16 @@ public sealed class TrackerModel(Func<string?> read, Action<string> write, strin
 
     void Save(List<TrackedBuff> items) => write(JsonSerializer.Serialize(items));
 
-    /// <summary>Remembers the own buffs seen now (the candidate list shows those of the last five minutes).</summary>
+    /// <summary>Remembers the own buffs seen now (the candidate list shows those of the last two minutes; a buff whose time is over but that the game did not remove does not count as seen).</summary>
     public void Observe(IReadOnlyList<LiveBuff> own)
     {
         var now = nowMs();
         lock (_lock)
         {
+            foreach (var key in _seen.Where(pair => now - pair.Value.Seen > RecentMs).Select(pair => pair.Key).ToArray()) _seen.Remove(key);
             foreach (var buff in own)
             {
+                if (buff.EndsAtMs > 0 && buff.EndsAtMs <= now) continue;
                 _seen[buff.Id] = (buff, now);
                 if (buff.Stacks > 0) _lastStacks[buff.Id] = (buff.Stacks, now);
             }

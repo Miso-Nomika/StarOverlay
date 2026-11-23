@@ -13,7 +13,7 @@ public sealed class QuickPresetPlugin : IPlugin
     private const string Mind = "mind";
     private const string Char = "char";
 
-    public PluginInfo Info { get; } = new("quick.preset", "빠른 프리셋", "0.4.10");
+    public PluginInfo Info { get; } = new("quick.preset", "빠른 프리셋", "0.4.11");
 
     public void Load(IPluginContext context)
     {

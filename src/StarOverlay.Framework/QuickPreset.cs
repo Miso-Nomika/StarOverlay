@@ -30,17 +30,26 @@ public static class QuickPreset
         get { lock (Gate) return _active; }
     }
 
+    /// <summary>
+    /// A plugin that is loaded switches this on, one that is unloaded switches it off. The service builds the plugins of a new host before it lets the old host go
+    /// (switching any plugin on or off does that), so the old and the new instance of the same plugin are both there for a moment: the plugin counts as on
+    /// while at least one instance holds it.
+    /// </summary>
     public static void SetActive(bool active)
     {
         lock (Gate)
         {
-            if (_active == active) return;
-            _active = active;
-            if (!active) _items = [];
+            _holders = Math.Max(0, _holders + (active ? 1 : -1));
+            var now = _holders > 0;
+            if (_active == now) return;
+            _active = now;
+            if (!now) _items = [];
         }
 
         Changed?.Invoke();
     }
+
+    private static int _holders;
 
     public static IReadOnlyList<PresetItem> Items
     {
@@ -115,6 +124,7 @@ public static class QuickPreset
         {
             _items = [];
             _active = false;
+            _holders = 0;
             _request = "";
             _serial = 0;
             _failedKey = "";

@@ -263,7 +263,7 @@ internal sealed partial class SettingsView
         var visible = Math.Max(1, (int)(h / rowH));
         _cScroll = Math.Clamp(_cScroll, 0, Math.Max(0, editor.Candidates.Count - visible));
         if (editor.Candidates.Count == 0)
-            Text(_body.transform, "최근 5분 안에 걸린 내 버프가 없습니다.", x, y, w, 24, 13, new Color(0.62f, 0.68f, 0.76f, 1f));
+            Text(_body.transform, "최근 2분 안에 걸린 내 버프가 없습니다.", x, y, w, 24, 13, new Color(0.62f, 0.68f, 0.76f, 1f));
         if (_cScroll > 0) Small("▲", x + w - 56, y - 24, () => { _cScroll--; Dirty(); });
         if (_cScroll + visible < editor.Candidates.Count) Small("▼", x + w - 28, y - 24, () => { _cScroll++; Dirty(); });
         var maxCandidates = Math.Max(0, editor.Candidates.Count - visible);

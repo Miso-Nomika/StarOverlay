@@ -52,16 +52,16 @@ public sealed record PluginSetting(
 public sealed class PluginHost : IDisposable
 {
     private readonly List<RunningPlugin> _running = [];
-    private readonly List<PluginPanel> _panels = [];
+    private List<PluginPanel> _panels = []; // replaced, never changed in place: the service reads these while a plugin is switched
     private readonly List<string> _logs = [];
-    private readonly List<PluginSetting> _settings = [];
-    private readonly List<PluginMeter> _meters = [];
-    private readonly List<PluginChat> _chats = [];
-    private readonly List<PluginFrameButton> _frames = [];
-    private readonly List<PluginEncounterLog> _encounters = [];
-    private readonly List<PluginIcons> _icons = [];
-    private readonly List<PluginStepper> _steppers = [];
-    private readonly List<PluginEditor> _editors = [];
+    private List<PluginSetting> _settings = []; // replaced, never changed in place: the service reads these while a plugin is switched
+    private List<PluginMeter> _meters = []; // replaced, never changed in place: the service reads these while a plugin is switched
+    private List<PluginChat> _chats = []; // replaced, never changed in place: the service reads these while a plugin is switched
+    private List<PluginFrameButton> _frames = []; // replaced, never changed in place: the service reads these while a plugin is switched
+    private List<PluginEncounterLog> _encounters = []; // replaced, never changed in place: the service reads these while a plugin is switched
+    private List<PluginIcons> _icons = []; // replaced, never changed in place: the service reads these while a plugin is switched
+    private List<PluginStepper> _steppers = []; // replaced, never changed in place: the service reads these while a plugin is switched
+    private List<PluginEditor> _editors = []; // replaced, never changed in place: the service reads these while a plugin is switched
     private readonly List<PluginLoadError> _errors = [];
 
     public IReadOnlyList<PluginPanel> Panels => _panels;
@@ -161,7 +161,7 @@ public sealed class PluginHost : IDisposable
     {
         var context = new HostContext(gameDirectory, plugin.Info.Id, this, "");
         plugin.Load(context);
-        _running.Add(new RunningPlugin(plugin, null));
+        _running.Add(new RunningPlugin(plugin, null, ""));
     }
 
     public void LoadDirectory(string gameDirectory, string pluginsDirectory)
@@ -175,6 +175,54 @@ public sealed class PluginHost : IDisposable
         }
     }
 
+    /// <summary>
+    /// Loads the plugin of one folder into the running host; the plugins that run stay as they are (nothing of them is built again, so their records, lists and
+    /// timers go on). A plugin that is already running from this folder is left alone.
+    /// </summary>
+    public void LoadFolder(string gameDirectory, string folder)
+    {
+        if (!Directory.Exists(folder)) return;
+        var name = Path.GetFileName(Path.GetFullPath(folder));
+        if (_running.Any(running => running.Folder == name)) return;
+        foreach (var dll in Directory.GetFiles(folder, "*.dll"))
+            LoadDll(gameDirectory, dll);
+    }
+
+    /// <summary>
+    /// Stops one plugin (by its folder name or its id) and takes only its parts out of the windows and settings; the other plugins keep running untouched.
+    /// False when no such plugin runs.
+    /// </summary>
+    public bool Unload(string pluginOrFolder)
+    {
+        var gone = _running.Where(running => running.Folder == pluginOrFolder || running.Instance.Info.Id == pluginOrFolder).ToList();
+        if (gone.Count == 0) return false;
+        var ids = gone.Select(running => running.Instance.Info.Id).ToHashSet();
+        foreach (var running in gone)
+        {
+            try { running.Instance.Unload(); }
+            catch { /* a plugin failure must not block the rest */ }
+            _running.Remove(running);
+        }
+
+        _panels = _panels.Where(item => !ids.Contains(item.PluginId)).ToList();
+        _steppers = _steppers.Where(item => !ids.Contains(item.PluginId)).ToList();
+        _settings = _settings.Where(item => !ids.Contains(item.PluginId)).ToList();
+        _meters = _meters.Where(item => !ids.Contains(item.PluginId)).ToList();
+        _chats = _chats.Where(item => !ids.Contains(item.PluginId)).ToList();
+        _frames = _frames.Where(item => !ids.Contains(item.PluginId)).ToList();
+        _encounters = _encounters.Where(item => !ids.Contains(item.PluginId)).ToList();
+        _icons = _icons.Where(item => !ids.Contains(item.PluginId)).ToList();
+        _editors = _editors.Where(item => !ids.Contains(item.PluginId)).ToList();
+        foreach (var context in gone.Select(running => running.Context).OfType<PluginLoadContext>().Distinct())
+        {
+            if (_running.Any(running => ReferenceEquals(running.Context, context))) continue; // another plugin of the same file still runs
+            try { context.Unload(); }
+            catch { /* collectible unload is best-effort */ }
+        }
+
+        return true;
+    }
+
     public void Dispose()
     {
         foreach (var running in _running)
@@ -185,14 +233,16 @@ public sealed class PluginHost : IDisposable
 
         var contexts = _running.Select(running => running.Context).OfType<PluginLoadContext>().Distinct().ToArray();
         _running.Clear();
-        _panels.Clear();
-        _steppers.Clear();
-        _settings.Clear();
-        _meters.Clear();
-        _chats.Clear();
-        _frames.Clear();
+        _panels = [];
+        _steppers = [];
+        _settings = [];
+        _meters = [];
+        _chats = [];
+        _frames = [];
+        _icons = [];
+        _editors = [];
         _logs.Clear();
-        _encounters.Clear();
+        _encounters = [];
         foreach (var context in contexts)
         {
             try { context.Unload(); }
@@ -231,7 +281,7 @@ public sealed class PluginHost : IDisposable
                     continue;
                 var context = new HostContext(gameDirectory, plugin.Info.Id, this, Path.GetDirectoryName(Path.GetFullPath(dllPath)) ?? "");
                 plugin.Load(context);
-                _running.Add(new RunningPlugin(plugin, loadContext));
+                _running.Add(new RunningPlugin(plugin, loadContext, Path.GetFileName(Path.GetDirectoryName(Path.GetFullPath(dllPath))) ?? ""));
             }
             catch (Exception ex)
             {
@@ -244,33 +294,33 @@ public sealed class PluginHost : IDisposable
     {
         if (_panels.Any(existing => existing.PluginId == panel.PluginId && existing.Id == panel.Id))
             return;
-        _panels.Add(panel);
+        _panels = [.. _panels, panel];
     }
 
     private void AddMeter(PluginMeter meter)
     {
         if (_meters.Any(existing => existing.PluginId == meter.PluginId && existing.Id == meter.Id))
             return;
-        _meters.Add(meter);
+        _meters = [.. _meters, meter];
     }
 
     private void AddIcons(PluginIcons icons)
     {
         if (_icons.Any(existing => existing.PluginId == icons.PluginId && existing.Id == icons.Id)) return;
-        _icons.Add(icons);
+        _icons = [.. _icons, icons];
     }
 
     private void AddEditor(PluginEditor editor)
     {
         if (_editors.Any(existing => existing.PluginId == editor.PluginId && existing.Id == editor.Id)) return;
-        _editors.Add(editor);
+        _editors = [.. _editors, editor];
     }
 
     private void AddChat(PluginChat chat)
     {
         if (_chats.Any(existing => existing.PluginId == chat.PluginId && existing.Id == chat.Id))
             return;
-        _chats.Add(chat);
+        _chats = [.. _chats, chat];
     }
 
     private void AddFrameButton(PluginFrameButton button)
@@ -278,24 +328,24 @@ public sealed class PluginHost : IDisposable
         if (button.Slot < 0 || button.Slot >= FrameButtonSlots) return;
         if (_frames.Any(existing => existing.PluginId == button.PluginId && existing.Slot == button.Slot))
             return;
-        _frames.Add(button);
+        _frames = [.. _frames, button];
     }
 
     private void AddLog(PluginEncounterLog log)
     {
         if (_encounters.Any(existing => existing.PluginId == log.PluginId && existing.Id == log.Id))
             return;
-        _encounters.Add(log);
+        _encounters = [.. _encounters, log];
     }
 
     private void AddSetting(PluginSetting setting)
     {
         if (_settings.Any(existing => existing.PluginId == setting.PluginId && existing.Key == setting.Key))
             return;
-        _settings.Add(setting);
+        _settings = [.. _settings, setting];
     }
 
-    private sealed record RunningPlugin(IPlugin Instance, PluginLoadContext? Context);
+    private sealed record RunningPlugin(IPlugin Instance, PluginLoadContext? Context, string Folder);
 
     private sealed class HostContext : IPluginContext
     {
@@ -338,7 +388,7 @@ public sealed class PluginHost : IDisposable
         public void AddStepper(string id, string label, Func<string> value, Action<int> step)
         {
             if (host._steppers.Any(existing => existing.PluginId == pluginId && existing.Id == id)) return;
-            host._steppers.Add(new PluginStepper(pluginId, id, label, value, step));
+            host._steppers = [.. host._steppers, new PluginStepper(pluginId, id, label, value, step)];
         }
 
         public void AddLabel(string id, string title, Func<string> text) =>

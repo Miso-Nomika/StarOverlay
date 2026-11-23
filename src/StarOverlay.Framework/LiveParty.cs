@@ -147,17 +147,26 @@ public static class LiveParty
         get { lock (Gate) return _active; }
     }
 
+    /// <summary>
+    /// A plugin that is loaded switches this on, one that is unloaded switches it off. The service builds the plugins of a new host before it lets the old host go
+    /// (switching any plugin on or off does that), so the old and the new instance of the same plugin are both there for a moment: the plugin counts as on
+    /// while at least one instance holds it.
+    /// </summary>
     public static void SetActive(bool active)
     {
         lock (Gate)
         {
-            if (_active == active) return;
-            _active = active;
-            if (!active) _masters.Clear();
+            _holders = Math.Max(0, _holders + (active ? 1 : -1));
+            var now = _holders > 0;
+            if (_active == now) return;
+            _active = now;
+            if (!now) _masters.Clear();
         }
 
         Changed?.Invoke();
     }
+
+    static int _holders;
 
     /// <summary>The characters in the list whose master score has not been read yet.</summary>
     public static IReadOnlyList<long> Need

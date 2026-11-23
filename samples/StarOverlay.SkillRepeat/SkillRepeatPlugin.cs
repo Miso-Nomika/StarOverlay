@@ -21,7 +21,7 @@ public sealed class SkillRepeatPlugin : IPlugin
     private RepeatModel? _model;
     private Timer? _poll;
 
-    public PluginInfo Info { get; } = new("skill.repeat", "연속 입력", "0.4.10");
+    public PluginInfo Info { get; } = new("skill.repeat", "연속 입력", "0.4.11");
 
     public void Load(IPluginContext context)
     {
@@ -40,8 +40,8 @@ public sealed class SkillRepeatPlugin : IPlugin
     {
         _poll?.Dispose();
         _poll = null;
-        SkillRepeat.Set([], Interval());
-        SkillRepeat.SetActive(false); // the agent lets go of the game
+        SkillRepeat.SetActive(false); // the agent lets go of the game once no instance of the plugin is left
+        if (!SkillRepeat.Active) SkillRepeat.Set([], Interval()); // the skills go with the last one (a newer instance keeps them)
     }
 
     private void Push()
