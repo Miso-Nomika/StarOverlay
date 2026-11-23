@@ -1,6 +1,8 @@
 using System;
 using System.Diagnostics;
 using System.IO;
+using System.Security.Cryptography;
+using System.Text;
 using System.Threading;
 
 namespace StarOverlay.Ingame;
@@ -23,7 +25,7 @@ internal static class Service
         {
             try
             {
-                if (File.Exists(hostExe) && !IsRunning()) Launch(hostExe, gameRoot);
+                if (File.Exists(hostExe) && !IsRunning(gameRoot)) Launch(hostExe, gameRoot);
             }
             catch (Exception e)
             {
@@ -34,21 +36,30 @@ internal static class Service
         }
     }
 
-    static bool IsRunning()
+    static Process _launched;
+
+    /// <summary>
+    /// Whether the service of THIS game is there: the service holds a lock named after its game folder (the same name Host/Program.cs makes), so another game's
+    /// service does not count and a second client gets its own. One that was just started counts too, before it has made its lock.
+    /// </summary>
+    static bool IsRunning(string gameRoot)
     {
-        foreach (var process in Process.GetProcessesByName("StarOverlay.Host"))
+        try
         {
-            try
-            {
-                if (!process.HasExited) return true;
-            }
-            catch (Exception)
-            {
-                return true;
-            }
+            if (_launched != null && !_launched.HasExited) return true;
+        }
+        catch (Exception)
+        {
+            return true;
         }
 
-        return false;
+        var game = Path.TrimEndingDirectorySeparator(Path.GetFullPath(gameRoot));
+        string name;
+        using (var sha = SHA256.Create())
+            name = @"Local\StarOverlay.Agent." + BitConverter.ToString(sha.ComputeHash(Encoding.UTF8.GetBytes(game.ToLowerInvariant()))).Replace("-", "");
+        if (!Mutex.TryOpenExisting(name, out var held)) return false;
+        held.Dispose();
+        return true;
     }
 
     static void Launch(string hostExe, string gameRoot)
@@ -62,7 +73,7 @@ internal static class Service
         start.ArgumentList.Add("--agent");
         start.ArgumentList.Add("--game");
         start.ArgumentList.Add(gameRoot);
-        Process.Start(start);
+        _launched = Process.Start(start);
         Plugin.L.LogInfo("service started: " + hostExe);
     }
 }

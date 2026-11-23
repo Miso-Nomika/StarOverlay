@@ -41,11 +41,11 @@ internal sealed class AgentContext : ApplicationContext, IIngameHooks
         _host.LoadDirectory(home, ModLayout.PluginsDirectory(home));
 
         StarOverlay.Core.Capture.CaptureSetup.StartHelper();
-        _capture = new GameCapture(home, [new PipePacketSource()]);
+        _capture = new GameCapture(home, [new PipePacketSource(PipePacketSource.DefaultPipeName(install))]);
         _capture.Start();
 
         var config = Path.Combine(ModLayout.Root(home), "config");
-        _service = new IngameService(this, IngameService.DefaultPipeName(), Path.Combine(config, "ingame-layout.json"), ModLayout.PluginsDirectory(home))
+        _service = new IngameService(this, IngameService.DefaultPipeName(install), Path.Combine(config, "ingame-layout.json"), ModLayout.PluginsDirectory(home))
         {
             TablesRoot = Path.Combine(home, "tables"), // the same folder GameCapture reads first
         };

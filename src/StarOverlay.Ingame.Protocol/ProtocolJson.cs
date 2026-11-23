@@ -12,7 +12,21 @@ public static class Protocol
     /// <summary>Largest line either side accepts. A meter snapshot is small; a long 20-person raid record is a few MB.</summary>
     public const int MaxLineBytes = 8 * 1024 * 1024;
 
-    public static string PipeName(string userSid) => "StarOverlay.Ingame." + userSid;
+    /// <summary>
+    /// The pipe between the in-game agent and the service of one game: per Windows user and per game folder, so two clients started together each get their own
+    /// service (one pipe takes one connection). Both sides write the folder the same way here, so they always agree on the name.
+    /// </summary>
+    public static string PipeName(string userSid, string gameFolder) => "StarOverlay.Ingame." + userSid + "." + FolderKey(gameFolder);
+
+    static string FolderKey(string folder)
+    {
+        var text = (folder ?? "").Replace('/', '\\').TrimEnd('\\').ToLowerInvariant();
+        using var sha = System.Security.Cryptography.SHA256.Create();
+        var hash = sha.ComputeHash(System.Text.Encoding.UTF8.GetBytes(text));
+        var sb = new System.Text.StringBuilder();
+        for (var i = 0; i < 6; i++) sb.Append(hash[i].ToString("x2"));
+        return sb.ToString();
+    }
 }
 
 public static class ProtocolJson

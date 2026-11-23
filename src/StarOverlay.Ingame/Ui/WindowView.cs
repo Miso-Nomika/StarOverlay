@@ -13,7 +13,8 @@ internal sealed class WindowView
 {
     const float Header = 30f;
     const float Pad = 6f;
-    const float GripRoom = 26f; // keeps the footer clock clear of the resize triangle in the corner
+    const float GripRoom = 10f; // the footer ends where the resize triangle in the corner begins (the body edge is 6 from the window edge, the triangle 16 wide)
+    const float FootDrop = 3f;  // the footer line sits this much lower than the room it takes, close to the bottom edge
 
     static readonly Color Panel = new(0.07f, 0.08f, 0.1f, 0.88f);
     static readonly Color Bar = new(0.12f, 0.14f, 0.18f, 1f);
@@ -36,6 +37,8 @@ internal sealed class WindowView
     IconStrip _strip;
     TextMeshProUGUI _footPlace;
     TextMeshProUGUI _footTime;
+    GameObject _footReset;      // the meter's reset button at the end of the footer, shown while the header (and with it the header's reset button) is hidden
+    int _footResetSlot;
     WindowDto _dto;
     LayoutDto _live; // the layout while the user drags (not yet confirmed by the service)
     string _buttonSignature = "";
@@ -409,6 +412,31 @@ internal sealed class WindowView
 
     // ---- body
 
+    const double FootResetWidth = 22;
+
+    /// <summary>The same reset button as the header's, at the end of the footer: only while the header is hidden (frame is null otherwise).</summary>
+    void ShowFootReset(FrameButtonDto frame, double x, double y)
+    {
+        if (frame == null)
+        {
+            if (_footReset != null) _footReset.SetActive(false);
+            return;
+        }
+
+        _footResetSlot = frame.Slot;
+        if (_footReset == null)
+        {
+            var label = UiKit.Button("FootReset", _body.transform, "", Button, () => _root.Send(new CommandDto { Window = Id, Action = CommandAction.Press, Key = "frame:" + _footResetSlot }));
+            var sprite = UiKit.Icon("reset");
+            if (sprite != null) UiKit.SetIcon(label, sprite);
+            else label.text = IconWords("reset");
+            _footReset = label.transform.parent.gameObject;
+        }
+
+        _footReset.SetActive(true);
+        UiKit.Place(_footReset, x, y + 1, FootResetWidth, 16);
+    }
+
     void FillBody(WindowDto dto, LayoutDto layout)
     {
         var (_, _, width, height) = LayoutMath.ToReferencePixels(layout);
@@ -502,7 +530,7 @@ internal sealed class WindowView
                     }
 
                     // the mouse wheel scrolls the rows when there are more than fit
-                    var footerHeight = widget.Place.Length > 0 ? 22 : 0; // place, channel, coordinates and the fight clock
+                    var footerHeight = widget.Place.Length > 0 ? 18 : 0; // place, channel, coordinates and the fight clock
                     var listHeight = bodyHeight - footerHeight;
                     var size = widget.TextSize > 0 ? widget.TextSize : 15;
                     var visible = Math.Max(1, (int)((listHeight - y) / step));
@@ -532,8 +560,11 @@ internal sealed class WindowView
                         _footTime ??= UiKit.Text("FootTime", _body.transform, 13, Color.white, TextAlignmentOptions.MidlineRight);
                         _footPlace.fontSize = _footTime.fontSize = Math.Max(10, size - 2);
                         var timeWidth = Math.Max(60, widget.Elapsed.Length * size * 0.7);
-                        UiKit.Place(_footPlace.gameObject, 4, bodyHeight - footerHeight, Math.Max(10, bodyWidth - timeWidth - GripRoom - 8), footerHeight);
-                        UiKit.Place(_footTime.gameObject, bodyWidth - timeWidth - GripRoom, bodyHeight - footerHeight, timeWidth, footerHeight); // left of the resize triangle
+                        var resetFrame = layout.HeaderHidden && !layout.Collapsed && !layout.Pinned ? dto.FrameButtons.Find(frame => Caption(frame) == "icon:reset") : null;
+                        var resetRoom = resetFrame != null ? FootResetWidth + 4 : 0; // the clock moves left and the button takes its place
+                        UiKit.Place(_footPlace.gameObject, 4, bodyHeight - footerHeight + FootDrop, Math.Max(10, bodyWidth - timeWidth - GripRoom - resetRoom - 8), footerHeight);
+                        UiKit.Place(_footTime.gameObject, bodyWidth - timeWidth - GripRoom - resetRoom, bodyHeight - footerHeight + FootDrop, timeWidth, footerHeight); // left of the resize triangle
+                        ShowFootReset(resetFrame, bodyWidth - GripRoom - FootResetWidth, bodyHeight - footerHeight + FootDrop);
                         UiKit.SetText(_footPlace, Escape(widget.Place));
                         UiKit.SetText(_footTime, widget.Elapsed);
                         _footPlace.gameObject.SetActive(true);
@@ -594,6 +625,7 @@ internal sealed class WindowView
         {
             _footPlace.gameObject.SetActive(false);
             _footTime.gameObject.SetActive(false);
+            if (_footReset != null) _footReset.SetActive(false);
         }
 
     }

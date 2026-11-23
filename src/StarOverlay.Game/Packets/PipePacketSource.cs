@@ -20,9 +20,9 @@ public sealed class PipePacketSource : ExternalPacketSource
 
     readonly bool _requireHelperProcess;
 
-    public PipePacketSource(string? pipeName = null, TimeSpan? connectTimeout = null, bool requireHelperProcess = true)
+    public PipePacketSource(string? pipeName, TimeSpan? connectTimeout = null, bool requireHelperProcess = true)
     {
-        _pipeName = pipeName ?? DefaultPipeName();
+        _pipeName = pipeName ?? throw new ArgumentNullException(nameof(pipeName));
         _connectTimeout = connectTimeout ?? TimeSpan.FromSeconds(10);
         _requireHelperProcess = requireHelperProcess;
     }
@@ -30,11 +30,11 @@ public sealed class PipePacketSource : ExternalPacketSource
     public override string Name => "pipe";
     public override string Label => _pipeName;
 
-    /// <summary>Per-user pipe name, so two Windows accounts on one PC never share a pipe.</summary>
-    public static string DefaultPipeName()
+    /// <summary>Per-user and per-game pipe name: two Windows accounts never share a pipe, and two clients each get their own.</summary>
+    public static string DefaultPipeName(string gameFolder)
     {
         var sid = WindowsIdentity.GetCurrent().User?.Value ?? "unknown";
-        return "StarOverlay.Capture." + sid;
+        return CapturePipe.Name("StarOverlay.Capture." + sid, gameFolder);
     }
 
     NamedPipeServerStream CreateServer()

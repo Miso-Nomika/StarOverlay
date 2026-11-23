@@ -14,7 +14,7 @@ namespace StarOverlay.Ingame.Ui;
 
 /// <summary>
 /// The sticker pictures are files of the game client (address "ui/textures/chat_emoji/sticker_3_11"). The names of all of them are read once from the
-/// address list the client ships (the files in StreamingAssets\container that begin with "AddressCount"); a sticker whose name fits exactly one of them is
+/// address list that comes with the agent and from the one the client ships (the files in StreamingAssets\container that begin with "AddressCount"); a sticker whose name fits exactly one of them is
 /// loaded through the game's own loader (a ZRawImage that is asked for the address), so no chat bubble of the game is needed.
 /// </summary>
 static class StickerLoader
@@ -43,11 +43,12 @@ static class StickerLoader
         if (_reading) return;
         _reading = true;
         var root = Plugin.GameRoot;
+        var shipped = Path.Combine(Plugin.PluginDirectory, "addresses.txt");
         Task.Run(() =>
         {
             try
             {
-                _names = Read(root);
+                _names = Read(root, shipped);
                 StickerCache.Diag($"loader: {_names.Count} picture names read from the client\n");
             }
             catch (Exception e)
@@ -58,29 +59,44 @@ static class StickerLoader
         });
     }
 
-    static HashSet<string> Read(string gameRoot)
+    static void Collect(string line, HashSet<string> names)
+    {
+        var at = line.IndexOf(AddressPrefix, StringComparison.Ordinal);
+        if (at < 0) return;
+        var end = line.IndexOf(' ', at);
+        var name = end < 0 ? line[(at + AddressPrefix.Length)..] : line[(at + AddressPrefix.Length)..end];
+        if (Name.IsMatch(name)) names.Add(name);
+    }
+
+    static HashSet<string> Read(string gameRoot, string shippedList)
     {
         var names = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var data in Directory.GetDirectories(gameRoot, "*_Data"))
+        // the list that comes with the agent: the Steam client keeps no readable list of its own, so without it no sticker or emoji could be found there
+        if (File.Exists(shippedList))
         {
-            var container = Path.Combine(data, "StreamingAssets", "container");
-            if (!Directory.Exists(container)) continue;
-            foreach (var file in Directory.GetFiles(container, "*.bytes", SearchOption.AllDirectories))
+            foreach (var line in File.ReadLines(shippedList)) Collect(line, names);
+        }
+
+        try
+        {
+            foreach (var data in Directory.GetDirectories(gameRoot, "*_Data"))
             {
-                using var stream = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
-                using var reader = new StreamReader(stream, Encoding.UTF8);
-                var first = reader.ReadLine();
-                if (first == null || !first.TrimStart('﻿').StartsWith("AddressCount", StringComparison.Ordinal)) continue;
-                string line;
-                while ((line = reader.ReadLine()) != null)
+                var container = Path.Combine(data, "StreamingAssets", "container");
+                if (!Directory.Exists(container)) continue;
+                foreach (var file in Directory.GetFiles(container, "*.bytes", SearchOption.AllDirectories))
                 {
-                    var at = line.IndexOf(AddressPrefix, StringComparison.Ordinal);
-                    if (at < 0) continue;
-                    var end = line.IndexOf(' ', at);
-                    var name = end < 0 ? line[(at + AddressPrefix.Length)..] : line[(at + AddressPrefix.Length)..end];
-                    if (Name.IsMatch(name)) names.Add(name);
+                    using var stream = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                    using var reader = new StreamReader(stream, Encoding.UTF8);
+                    var first = reader.ReadLine();
+                    if (first == null || !first.TrimStart('﻿').StartsWith("AddressCount", StringComparison.Ordinal)) continue;
+                    string line;
+                    while ((line = reader.ReadLine()) != null) Collect(line, names);
                 }
             }
+        }
+        catch (Exception e)
+        {
+            StickerCache.Diag("loader: reading the client's lists failed: " + e.Message + "\n"); // development build only
         }
 
         return names;

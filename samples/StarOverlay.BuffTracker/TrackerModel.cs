@@ -34,7 +34,7 @@ public sealed class TrackedBuff
 public sealed class TrackerModel(Func<string?> read, Action<string> write, string customDirectory, Func<long> nowMs)
 {
     public const string ItemsKey = "items";
-    public const long RecentMs = 120_000;
+    public const long RecentMs = 60_000;
     const int MaxCandidates = 30;
 
     /// <summary>How opaque (percent) the picture of a buff that is there is drawn; 100 when not set. The time and the stacks have their own.</summary>
@@ -58,6 +58,7 @@ public sealed class TrackerModel(Func<string?> read, Action<string> write, strin
 
     readonly Dictionary<int, (LiveBuff Buff, long Seen)> _seen = [];
     readonly Dictionary<int, (int Stacks, long Seen)> _lastStacks = []; // the stacks a buff showed when it was last seen (a combined icon keeps them while only the time buff is there)
+    Dictionary<int, (int Stacks, long EndsAtMs)> _present = []; // what the last look saw: a buff that stays unchanged (a set effect, an always-on option) is not news
     const long StacksSlackMs = 1000;
     readonly object _lock = new();
 
@@ -78,19 +79,30 @@ public sealed class TrackerModel(Func<string?> read, Action<string> write, strin
 
     void Save(List<TrackedBuff> items) => write(JsonSerializer.Serialize(items));
 
-    /// <summary>Remembers the own buffs seen now (the candidate list shows those of the last two minutes; a buff whose time is over but that the game did not remove does not count as seen).</summary>
+    /// <summary>
+    /// Remembers the own buffs that came or changed (the candidate list shows those of the last minute); only buffs the meter records too (it skips one with no time, no cooldown and at most one stack). A buff that is there all the time unchanged (a set
+    /// effect, an option that is always on) is only noted when it first shows up and ages out like any other; one whose time is over but that the game did not
+    /// remove does not count.
+    /// </summary>
     public void Observe(IReadOnlyList<LiveBuff> own)
     {
         var now = nowMs();
         lock (_lock)
         {
             foreach (var key in _seen.Where(pair => now - pair.Value.Seen > RecentMs).Select(pair => pair.Key).ToArray()) _seen.Remove(key);
+            var present = new Dictionary<int, (int Stacks, long EndsAtMs)>();
             foreach (var buff in own)
             {
                 if (buff.EndsAtMs > 0 && buff.EndsAtMs <= now) continue;
-                _seen[buff.Id] = (buff, now);
                 if (buff.Stacks > 0) _lastStacks[buff.Id] = (buff.Stacks, now);
+                if (buff.Stacks <= 1 && buff.Duration <= 0 && buff.Cooldown <= 0) continue; // the meter does not record a buff like this either (no time, no cooldown, no stacks)
+                var state = (buff.Stacks, buff.EndsAtMs);
+                present[buff.Id] = state;
+                if (!_present.TryGetValue(buff.Id, out var before) || before != state) _seen[buff.Id] = (buff, now); // it came, was applied again, or its stacks changed
+                else if (_seen.TryGetValue(buff.Id, out var known)) _seen[buff.Id] = (buff, known.Seen); // unchanged: the details stay current, the time does not move
             }
+
+            _present = present;
         }
     }
 

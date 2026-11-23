@@ -94,7 +94,7 @@ public sealed class IngameService : IDisposable
 
     public event Action? AgentDisconnected;
 
-    public static string DefaultPipeName() => Protocol.PipeName(WindowsIdentity.GetCurrent().User?.Value ?? "unknown");
+    public static string DefaultPipeName(string gameFolder) => Protocol.PipeName(WindowsIdentity.GetCurrent().User?.Value ?? "unknown", gameFolder);
 
     public void Start()
     {

@@ -9,8 +9,10 @@ namespace StarOverlay.Capture;
 
 /// <summary>
 /// Raw-socket helper: receives the game's TCP packets without Npcap and sends them to the Host through a named pipe.
-/// It needs an administrator token (SIO_RCVALL). It accepts no commands; it ends when the pipe closes or the game exits.
-/// Usage: StarOverlay.Capture --pipe &lt;name&gt; [--pid &lt;game pid&gt;] [--wait &lt;seconds&gt;]
+/// It needs an administrator token (SIO_RCVALL). It accepts no commands. One helper serves every game that runs: each game gets its own worker and its own
+/// pipe (the base name plus the game folder, see CapturePipe), so two clients started together each reach their own service. It ends when no game is left.
+/// Usage: StarOverlay.Capture --pipe &lt;base name&gt; [--pid &lt;game pid&gt;] [--wait &lt;seconds&gt;]
+/// With --pid it serves only that process and uses the pipe name as it is.
 /// </summary>
 internal static class Program
 {
@@ -40,11 +42,93 @@ internal static class Program
         if (string.IsNullOrWhiteSpace(pipeName)) return ExitUsage;
         try
         {
-            return Run(pipeName, pid, waitSeconds);
+            return pid != 0 ? Run(pipeName, pid, waitSeconds) : Supervise(pipeName, waitSeconds);
         }
         catch (Exception ex)
         {
             return ExitFailed;
+        }
+    }
+
+    /// <summary>Starts a worker for every game process that shows up (and again for one whose service restarted), and ends when no game has been there for a while.</summary>
+    static int Supervise(string baseName, int waitSeconds)
+    {
+        var workers = new Dictionary<int, Task<int>>();
+        var started = DateTime.UtcNow;
+        var lastSeen = DateTime.MinValue;
+        while (true)
+        {
+            var now = DateTime.UtcNow;
+            var games = FindGames();
+            if (games.Count > 0) lastSeen = now;
+            foreach (var pid in games)
+            {
+                if (workers.TryGetValue(pid, out var running) && !running.IsCompleted) continue;
+                var folder = GameFolder(pid);
+                if (folder == null) continue;
+                var pipe = CapturePipe.Name(baseName, folder);
+                workers[pid] = Task.Factory.StartNew(() => Work(pipe, pid, waitSeconds), TaskCreationOptions.LongRunning);
+            }
+
+            foreach (var pid in workers.Keys.ToArray())
+                if (workers[pid].IsCompleted && !games.Contains(pid)) workers.Remove(pid);
+
+            if (lastSeen == DateTime.MinValue ? (now - started).TotalSeconds > Math.Max(waitSeconds, 5) : (now - lastSeen).TotalSeconds > 10)
+                return lastSeen == DateTime.MinValue ? ExitNoGame : ExitOk;
+            Thread.Sleep(1000);
+        }
+    }
+
+    static int Work(string pipe, int pid, int waitSeconds)
+    {
+        try
+        {
+            return Run(pipe, pid, waitSeconds);
+        }
+        catch (Exception)
+        {
+            return ExitFailed;
+        }
+    }
+
+    static HashSet<int> FindGames()
+    {
+        var ids = new HashSet<int>();
+        foreach (var name in GameNames)
+        {
+            foreach (var process in Process.GetProcessesByName(name))
+            {
+                ids.Add(process.Id);
+                process.Dispose();
+            }
+        }
+
+        return ids;
+    }
+
+    [DllImport("kernel32.dll")]
+    static extern IntPtr OpenProcess(uint access, [MarshalAs(UnmanagedType.Bool)] bool inherit, int pid);
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
+    static extern unsafe bool QueryFullProcessImageNameW(IntPtr process, uint flags, char* buffer, ref uint size);
+
+    [DllImport("kernel32.dll")]
+    static extern bool CloseHandle(IntPtr handle);
+
+    /// <summary>The folder of the game's exe (the game folder the service was started with); null when it cannot be read.</summary>
+    static unsafe string? GameFolder(int pid)
+    {
+        var handle = OpenProcess(0x1000, false, pid); // PROCESS_QUERY_LIMITED_INFORMATION
+        if (handle == IntPtr.Zero) return null;
+        try
+        {
+            var buffer = stackalloc char[1024];
+            uint size = 1024;
+            return QueryFullProcessImageNameW(handle, 0, buffer, ref size) ? Path.GetDirectoryName(new string(buffer, 0, (int)size)) : null;
+        }
+        finally
+        {
+            CloseHandle(handle);
         }
     }
 

@@ -23,6 +23,7 @@
 
   <ItemGroup>
     <Compile Include="..\StarOverlay.Game\Packets\PacketFrames.cs" Link="PacketFrames.cs" />
+    <Compile Include="..\StarOverlay.Game\Packets\CapturePipe.cs" Link="CapturePipe.cs" />
   </ItemGroup>
 
 </Project>

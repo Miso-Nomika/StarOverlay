@@ -51,7 +51,7 @@ internal sealed class PipeLink
     void Loop()
     {
         var sid = WindowsIdentity.GetCurrent().User?.Value ?? "unknown";
-        var name = Protocol.Protocol.PipeName(sid);
+        var name = Protocol.Protocol.PipeName(sid, Plugin.GameRoot);
         while (true)
         {
             try
